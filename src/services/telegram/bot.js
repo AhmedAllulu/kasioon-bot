@@ -244,16 +244,22 @@ Send a voice message and I'll understand
       const extractedParams = await aiAgent.analyzeMessage(userMessage, language);
       logger.info('[AI] Extracted params:', extractedParams);
 
-      // Search marketplace
-      const results = await marketplaceSearch.search(extractedParams);
-
-      // AI-powered result filtering: return only most relevant results
-      const filteredResults = await aiAgent.filterRelevantResults(results, userMessage, 10);
+      // Search marketplace with smart fallback strategies, filter enrichment, and match scoring
+      const searchResponse = await aiAgent.searchMarketplace(extractedParams, userMessage, language);
+      const { results: filteredResults, filterDescription, matchedFilters } = searchResponse;
 
       // Format response
       let formattedMessage;
       if (filteredResults.length > 0) {
         formattedMessage = responseFormatter.formatSearchResults(filteredResults, language);
+
+        // Add filter description if filters were matched
+        if (filterDescription) {
+          const filterHeader = language === 'ar'
+            ? `\n🔍 *فلاتر البحث المطبقة:*\n${filterDescription}\n`
+            : `\n🔍 *Applied search filters:*\n${filterDescription}\n`;
+          formattedMessage = filterHeader + formattedMessage;
+        }
 
         // Cache results if enough results
         if (filteredResults.length >= 3) {
@@ -267,15 +273,14 @@ Send a voice message and I'll understand
       await ctx.deleteMessage(searchingMsg.message_id).catch(() => {});
       await this.sendFormattedMessage(ctx, formattedMessage);
 
-      // Log search to database (log both total and filtered count)
+      // Log search to database
       const responseTime = Date.now() - startTime;
       await searchHistory.logSearch({
         userId,
         platform: 'telegram',
         queryText: userMessage,
         extractedParams,
-        resultsCount: filteredResults.length,  // Log filtered count
-        totalResultsCount: results.length,      // Also track total before filtering
+        resultsCount: filteredResults.length,
         responseTimeMs: responseTime,
         category: extractedParams.category,
         city: extractedParams.city,

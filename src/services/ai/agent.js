@@ -4,6 +4,9 @@ const logger = require('../../utils/logger');
 const marketplaceSearch = require('../search/marketplaceSearch');
 const modelManager = require('./modelManager');
 const cache = require('../cache');
+const ArabicNormalizer = require('../../utils/arabicNormalizer');
+const FilterMatcher = require('./filterMatcher');
+const MatchScorer = require('./matchScorer');
 
 /**
  * Detect language from text message
@@ -133,7 +136,15 @@ Extract the following parameters if mentioned:
 - maxPrice: Maximum price
 - condition: Item condition (new, used)
 
-IMPORTANT CATEGORIZATION RULES FOR REAL ESTATE:
+IMPORTANT CATEGORIZATION RULES:
+
+1. SERVICES - Programming, development, business services:
+- Programming companies (شركة برمجة) → category: "services"
+- Development services (تطوير/برمجة/مواقع/تطبيقات) → category: "services"
+- Web development (تطوير مواقع) → category: "services"
+- Any business service (خدمة/خدمات) → category: "services"
+
+2. REAL ESTATE:
 - ANY type of land (أرض) MUST be categorized as "real-estate", including:
   * Agricultural land (أرض زراعية)
   * Commercial land (أرض تجارية)
@@ -162,11 +173,17 @@ Examples:
 User: "أريد سيارة تويوتا في حلب"
 Response: {"city": "Aleppo", "category": "vehicles", "carBrand": "Toyota", "keywords": "سيارة تويوتا"}
 
+User: "بدي شركة برمجة في دمشق"
+Response: {"city": "Damascus", "category": "services", "keywords": "شركة برمجة"}
+
 User: "شقة للبيع في دمشق"
 Response: {"city": "Damascus", "category": "real-estate", "keywords": "شقة للبيع"}
 
 User: "بدي ارض زراعية في إدلب"
 Response: {"city": "Idlib", "category": "real-estate", "keywords": "أرض زراعية"}
+
+User: "تطوير مواقع ويب"
+Response: {"category": "services", "keywords": "تطوير مواقع ويب"}
 
 User: "أرض تجارية للبيع في حلب"
 Response: {"city": "Aleppo", "category": "real-estate", "keywords": "أرض تجارية للبيع"}
@@ -377,6 +394,73 @@ Response: {"category": "electronics", "keywords": "لابتوب", "condition": "
       });
       logger.error('Error analyzing message:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Enrich search parameters with category-specific filters
+   * @param {Object} params - Basic search parameters from analyzeMessage
+   * @param {string} userMessage - Original user message
+   * @param {string} language - Language code (ar/en)
+   * @returns {Promise<Object>} Enriched parameters with filters
+   */
+  async enrichParametersWithFilters(params, userMessage, language = 'ar') {
+    try {
+      // If no category, can't fetch filters
+      if (!params.category) {
+        console.log('ℹ️  [FILTER-ENRICH] No category specified, skipping filter enrichment');
+        return params;
+      }
+
+      console.log('🔍 [FILTER-ENRICH] Starting filter enrichment for category:', params.category);
+
+      // Fetch category filters
+      const filterData = await marketplaceSearch.getCategoryFilters(params.category);
+
+      if (!filterData || !filterData.filters || filterData.filters.length === 0) {
+        console.log('⚠️  [FILTER-ENRICH] No filters available for category:', params.category);
+        return params;
+      }
+
+      console.log('✅ [FILTER-ENRICH] Fetched filters:', filterData.filters.length, 'filters');
+
+      // Extract and match filters from user message
+      const matchedFilters = FilterMatcher.matchFiltersFromMessage(
+        userMessage,
+        filterData.filters,
+        language
+      );
+
+      if (Object.keys(matchedFilters).length > 0) {
+        console.log('✅ [FILTER-ENRICH] Matched filters:', JSON.stringify(matchedFilters, null, 2));
+
+        // Add matched filters to params
+        params.matchedFilters = matchedFilters;
+
+        // Build filter query parameters for API
+        const filterQueryParams = FilterMatcher.buildFilterQueryParams(matchedFilters);
+        params.filterParams = filterQueryParams;
+
+        // Get human-readable description
+        const filterDescription = FilterMatcher.describeMatchedFilters(
+          matchedFilters,
+          filterData.filters,
+          language
+        );
+        params.filterDescription = filterDescription;
+
+        console.log('📋 [FILTER-ENRICH] Filter description:', filterDescription);
+      } else {
+        console.log('ℹ️  [FILTER-ENRICH] No filters matched from user message');
+      }
+
+      return params;
+
+    } catch (error) {
+      console.error('❌ [FILTER-ENRICH] Error enriching parameters:', error.message);
+      logger.error('Error enriching parameters with filters:', error);
+      // Return original params on error (graceful fallback)
+      return params;
     }
   }
 
@@ -593,8 +677,28 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
         if (item.attributes?.price || item.price) {
           message += `   💰 السعر: ${item.attributes?.price || item.price}\n`;
         }
-        if (item.location?.cityName || item.city) {
-          message += `   📍 المدينة: ${item.location?.cityName || item.city}\n`;
+        // Handle location - API returns location.city as string
+        let locationText = null;
+        if (item.location) {
+          if (typeof item.location === 'string') {
+            locationText = item.location;
+          } else if (item.location.city) {
+            locationText = typeof item.location.city === 'string' 
+              ? item.location.city 
+              : item.location.city.name;
+            if (item.location.province && item.location.province !== locationText) {
+              locationText = `${locationText}, ${item.location.province}`;
+            }
+          } else if (item.location.province) {
+            locationText = item.location.province;
+          } else if (item.location.cityName) {
+            locationText = item.location.cityName;
+          }
+        } else if (item.city) {
+          locationText = typeof item.city === 'string' ? item.city : item.city.name;
+        }
+        if (locationText) {
+          message += `   📍 المدينة: ${locationText}\n`;
         }
         
         // Add listing URL
@@ -630,8 +734,28 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
         if (item.attributes?.price || item.price) {
           message += `   💰 Price: ${item.attributes?.price || item.price}\n`;
         }
-        if (item.location?.cityName || item.city) {
-          message += `   📍 City: ${item.location?.cityName || item.city}\n`;
+        // Handle location - API returns location.city as string
+        let locationText = null;
+        if (item.location) {
+          if (typeof item.location === 'string') {
+            locationText = item.location;
+          } else if (item.location.city) {
+            locationText = typeof item.location.city === 'string' 
+              ? item.location.city 
+              : item.location.city.name;
+            if (item.location.province && item.location.province !== locationText) {
+              locationText = `${locationText}, ${item.location.province}`;
+            }
+          } else if (item.location.province) {
+            locationText = item.location.province;
+          } else if (item.location.cityName) {
+            locationText = item.location.cityName;
+          }
+        } else if (item.city) {
+          locationText = typeof item.city === 'string' ? item.city : item.city.name;
+        }
+        if (locationText) {
+          message += `   📍 City: ${locationText}\n`;
         }
         
         // Add listing URL
@@ -697,13 +821,15 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
   }
 
   /**
-   * Analyze search results and return most relevant ones
+   * Analyze search results and return most relevant ones with comprehensive match scoring
    * @param {Array} results - Search results from API
    * @param {string} userMessage - Original user query
+   * @param {Object} userParams - Extracted search parameters
    * @param {number} maxResults - Maximum number of results to return (default: 10)
-   * @returns {Promise<Array>} Filtered and ranked results
+   * @param {number} minScore - Minimum match score threshold (default: 30)
+   * @returns {Promise<Array>} Filtered and ranked results with match scores
    */
-  async filterRelevantResults(results, userMessage, maxResults = 10) {
+  async filterRelevantResults(results, userMessage, userParams = {}, maxResults = 10, minScore = 30) {
     try {
       // If results are already within limit, return all
       if (!results || results.length === 0) {
@@ -711,47 +837,49 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
         return results;
       }
 
-      if (results.length <= maxResults) {
-        console.log(`✅ [AI-FILTER] Results (${results.length}) within limit (${maxResults}), returning all`);
-        return results;
-      }
+      console.log(`🔍 [AI-FILTER] Scoring ${results.length} results with comprehensive match algorithm...`);
 
-      console.log(`🔍 [AI-FILTER] Filtering ${results.length} results to top ${maxResults} most relevant...`);
-
-      // Simple relevance scoring based on keyword matching
-      // This is a lightweight approach that doesn't require an API call
-      const keywords = userMessage.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-      console.log(`🔑 [AI-FILTER] Keywords from query: ${keywords.join(', ')}`);
-
+      // Calculate match scores for all results
       const scoredResults = results.map(result => {
-        let score = 0;
-        const title = (result.title || '').toLowerCase();
-        const description = (result.description || '').toLowerCase();
-        const category = (result.category?.name || '').toLowerCase();
+        const { matchScore, matchDetails } = MatchScorer.calculateMatchScore(
+          result,
+          userParams,
+          userMessage,
+          userParams.matchedFilters || {}
+        );
 
-        // Score based on keyword matches in title (highest weight)
-        keywords.forEach(keyword => {
-          if (title.includes(keyword)) score += 3;
-          if (description.includes(keyword)) score += 1;
-          if (category.includes(keyword)) score += 2;
-        });
-
-        // Prefer listings with prices (likely more complete)
-        if (result.attributes?.price || result.price) score += 1;
-
-        // Prefer listings with images
-        if (result.images && result.images.length > 0) score += 1;
-
-        return { ...result, relevanceScore: score };
+        return {
+          ...result,
+          matchScore,
+          matchDetails
+        };
       });
 
-      // Sort by relevance score (descending)
-      scoredResults.sort((a, b) => b.relevanceScore - a.relevanceScore);
+      // Sort by match score (descending)
+      const sortedResults = MatchScorer.sortByMatchScore(scoredResults);
+
+      console.log(`📊 [AI-FILTER] Score distribution:`);
+      console.log(`   🟢 90-100%: ${sortedResults.filter(r => r.matchScore >= 90).length} results`);
+      console.log(`   🟡 70-89%:  ${sortedResults.filter(r => r.matchScore >= 70 && r.matchScore < 90).length} results`);
+      console.log(`   🟠 50-69%:  ${sortedResults.filter(r => r.matchScore >= 50 && r.matchScore < 70).length} results`);
+      console.log(`   🔴 <50%:    ${sortedResults.filter(r => r.matchScore < 50).length} results`);
+
+      // Filter by minimum score threshold
+      const filteredResults = MatchScorer.filterByThreshold(sortedResults, minScore);
+      console.log(`✅ [AI-FILTER] ${filteredResults.length} results above ${minScore}% threshold`);
 
       // Return top N results
-      const topResults = scoredResults.slice(0, maxResults);
-      console.log(`✅ [AI-FILTER] Filtered to top ${topResults.length} results`);
-      console.log(`📊 [AI-FILTER] Score range: ${topResults[0]?.relevanceScore} (best) to ${topResults[topResults.length-1]?.relevanceScore} (worst)`);
+      const topResults = filteredResults.slice(0, maxResults);
+
+      if (topResults.length > 0) {
+        console.log(`✅ [AI-FILTER] Returning top ${topResults.length} results`);
+        console.log(`📊 [AI-FILTER] Score range: ${topResults[0]?.matchScore}% (best) to ${topResults[topResults.length-1]?.matchScore}% (worst)`);
+
+        // Log detailed breakdown of top result
+        if (topResults[0]?.matchDetails) {
+          console.log(`🏆 [AI-FILTER] Top result breakdown:`, topResults[0].matchDetails);
+        }
+      }
 
       return topResults;
 
@@ -760,6 +888,69 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
       logger.error('Error filtering results:', error);
       // Fallback: return first N results
       return results.slice(0, maxResults);
+    }
+  }
+
+  /**
+   * Search marketplace with smart fallback strategies and filter enrichment
+   * @param {Object} params - Search parameters
+   * @param {string} userMessage - Original user message
+   * @param {string} language - Language code
+   * @returns {Promise<Object>} Search results with metadata
+   */
+  async searchMarketplace(params, userMessage = '', language = 'ar') {
+    try {
+      console.log('🔍 [AGENT] Starting marketplace search...');
+      console.log('📋 [AGENT] Initial search params:', JSON.stringify(params, null, 2));
+
+      // Step 1: Enrich parameters with category-specific filters
+      const enrichedParams = await this.enrichParametersWithFilters(params, userMessage, language);
+      console.log('📋 [AGENT] Enriched params:', JSON.stringify(enrichedParams, null, 2));
+
+      // Step 2: Use smart search instead of direct search
+      const { results, usedStrategy, totalStrategiesTried } = await marketplaceSearch.smartSearch(enrichedParams);
+
+      console.log(`📊 [AGENT] Smart search complete: ${results.length} results using "${usedStrategy}" (tried ${totalStrategiesTried} strategies)`);
+      
+      // DEBUG: Log raw results from API before filtering
+      console.log('\n🔍 [DEBUG-AGENT] ========== RAW API RESULTS (BEFORE FILTERING) ==========');
+      console.log('📦 [DEBUG-AGENT] Results count:', results.length);
+      console.log('📋 [DEBUG-AGENT] Full results array:', JSON.stringify(results, null, 2));
+      console.log('🔍 [DEBUG-AGENT] =======================================================\n');
+
+      // Step 3: If we have results, filter and score them by relevance
+      if (results.length > 0 && userMessage) {
+        const filteredResults = await this.filterRelevantResults(
+          results,
+          userMessage,
+          enrichedParams
+        );
+
+        // DEBUG: Log filtered results after processing
+        console.log('\n🔍 [DEBUG-AGENT] ========== FILTERED RESULTS (AFTER PROCESSING) ==========');
+        console.log('📦 [DEBUG-AGENT] Filtered results count:', filteredResults.length);
+        console.log('📋 [DEBUG-AGENT] Full filtered results array:', JSON.stringify(filteredResults, null, 2));
+        console.log('🔍 [DEBUG-AGENT] =======================================================\n');
+
+        return {
+          results: filteredResults,
+          usedStrategy,
+          totalStrategiesTried,
+          filterDescription: enrichedParams.filterDescription || null,
+          matchedFilters: enrichedParams.matchedFilters || null
+        };
+      }
+
+      return {
+        results,
+        usedStrategy,
+        totalStrategiesTried,
+        filterDescription: null,
+        matchedFilters: null
+      };
+    } catch (error) {
+      console.error('❌ [AGENT] Search error:', error.message);
+      throw error;
     }
   }
 

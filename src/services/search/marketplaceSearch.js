@@ -230,6 +230,11 @@ class MarketplaceSearchService {
         listingsCount: response.data?.data?.listings?.length || 0
       });
 
+      // DEBUG: Log full API response for analysis
+      console.log('\n🔍 [DEBUG] ========== FULL API RESPONSE ==========');
+      console.log('📦 [DEBUG] Full response.data:', JSON.stringify(response.data, null, 2));
+      console.log('🔍 [DEBUG] =========================================\n');
+
       // Extract listings from response
       // Response format: { success: true, data: { listings: [...], pagination: {...} } }
       const listings = response.data?.data?.listings || [];
@@ -237,6 +242,38 @@ class MarketplaceSearchService {
       
       console.log('📊 [SEARCH] Results extracted:', listings.length, 'listings');
       console.log('📄 [SEARCH] Pagination:', pagination);
+
+      // DEBUG: Log raw listings data for analysis
+      if (listings.length > 0) {
+        console.log('\n🔍 [DEBUG] ========== RAW LISTINGS DATA ==========');
+        console.log('📋 [DEBUG] Total listings:', listings.length);
+        console.log('📦 [DEBUG] Full listings array:', JSON.stringify(listings, null, 2));
+        
+        // Log structure of first listing as sample
+        if (listings[0]) {
+          console.log('\n📄 [DEBUG] ========== SAMPLE LISTING STRUCTURE ==========');
+          console.log('🔍 [DEBUG] First listing (sample):', JSON.stringify(listings[0], null, 2));
+          console.log('📋 [DEBUG] First listing keys:', Object.keys(listings[0]));
+          
+          // Log nested structures
+          if (listings[0].attributes) {
+            console.log('🔧 [DEBUG] First listing attributes:', JSON.stringify(listings[0].attributes, null, 2));
+          }
+          if (listings[0].location) {
+            console.log('📍 [DEBUG] First listing location:', JSON.stringify(listings[0].location, null, 2));
+          }
+          if (listings[0].category) {
+            console.log('📂 [DEBUG] First listing category:', JSON.stringify(listings[0].category, null, 2));
+          }
+          if (listings[0].images) {
+            console.log('🖼️  [DEBUG] First listing images:', JSON.stringify(listings[0].images, null, 2));
+          }
+          console.log('🔍 [DEBUG] =========================================\n');
+        }
+        console.log('🔍 [DEBUG] =========================================\n');
+      } else {
+        console.log('⚠️  [DEBUG] No listings in response');
+      }
 
       // Cache results for 5 minutes
       console.log('💾 [SEARCH] Caching results...');
@@ -359,37 +396,38 @@ class MarketplaceSearchService {
     // Location filtering - SMART STRATEGY with province-first approach
     if (params.city) {
       // Complete Syrian province mapping (all 14 governorates)
+      // Map to Arabic province names for better API compatibility
       const provinceMap = {
-        // English names
-        'Aleppo': 'Aleppo',
-        'Damascus': 'Damascus',
-        'Rif Dimashq': 'Rif Dimashq',
-        'Homs': 'Homs',
-        'Hama': 'Hama',
-        'Latakia': 'Latakia',
-        'Idlib': 'Idlib',
-        'Tartus': 'Tartus',
-        'Daraa': 'Daraa',
-        'As-Suwayda': 'As-Suwayda',
-        'Deir ez-Zor': 'Deir ez-Zor',
-        'Al-Hasakah': 'Al-Hasakah',
-        'Ar-Raqqah': 'Ar-Raqqah',
-        'Quneitra': 'Quneitra',
-        // Arabic names
-        'حلب': 'Aleppo',
-        'دمشق': 'Damascus',
-        'ريف دمشق': 'Rif Dimashq',
-        'حمص': 'Homs',
-        'حماة': 'Hama',
-        'اللاذقية': 'Latakia',
-        'إدلب': 'Idlib',
-        'طرطوس': 'Tartus',
-        'درعا': 'Daraa',
-        'السويداء': 'As-Suwayda',
-        'دير الزور': 'Deir ez-Zor',
-        'الحسكة': 'Al-Hasakah',
-        'الرقة': 'Ar-Raqqah',
-        'القنيطرة': 'Quneitra'
+        // English names → Arabic values
+        'Aleppo': 'حلب',
+        'Damascus': 'دمشق',
+        'Rif Dimashq': 'ريف دمشق',
+        'Homs': 'حمص',
+        'Hama': 'حماة',
+        'Latakia': 'اللاذقية',
+        'Idlib': 'إدلب',
+        'Tartus': 'طرطوس',
+        'Daraa': 'درعا',
+        'As-Suwayda': 'السويداء',
+        'Deir ez-Zor': 'دير الزور',
+        'Al-Hasakah': 'الحسكة',
+        'Ar-Raqqah': 'الرقة',
+        'Quneitra': 'القنيطرة',
+        // Arabic names → Arabic values (passthrough)
+        'حلب': 'حلب',
+        'دمشق': 'دمشق',
+        'ريف دمشق': 'ريف دمشق',
+        'حمص': 'حمص',
+        'حماة': 'حماة',
+        'اللاذقية': 'اللاذقية',
+        'إدلب': 'إدلب',
+        'طرطوس': 'طرطوس',
+        'درعا': 'درعا',
+        'السويداء': 'السويداء',
+        'دير الزور': 'دير الزور',
+        'الحسكة': 'الحسكة',
+        'الرقة': 'الرقة',
+        'القنيطرة': 'القنيطرة'
       };
 
       // SMART LOGIC: Check if location is a province
@@ -504,6 +542,21 @@ class MarketplaceSearchService {
         // Store as JSON string for query parameter
         normalized.attributes = JSON.stringify(attributes);
       }
+    }
+
+    // Dynamic category-specific filters (from filter enrichment)
+    if (params.filterParams && typeof params.filterParams === 'object') {
+      console.log('🔧 [NORMALIZE] Adding category-specific filters:', JSON.stringify(params.filterParams, null, 2));
+
+      // Add each filter parameter directly to the normalized params
+      // These are already in the correct format: filters[filterName]=value
+      Object.keys(params.filterParams).forEach(key => {
+        const value = params.filterParams[key];
+        if (value !== undefined && value !== null && value !== '') {
+          normalized[key] = value;
+          console.log(`   ✅ Added filter: ${key} = ${value}`);
+        }
+      });
     }
 
     // Sorting
@@ -915,6 +968,96 @@ class MarketplaceSearchService {
       }
     }
     return null;
+  }
+
+  /**
+   * Smart search with fallback strategies
+   * Tries multiple keyword combinations for better results
+   * @param {Object} params - Search parameters
+   * @returns {Promise<Object>} Search results with metadata
+   */
+  async smartSearch(params) {
+    console.log('🧠 [SMART-SEARCH] Starting intelligent search...');
+    
+    const strategies = this.buildSearchStrategies(params);
+    let allResults = [];
+    let usedStrategy = null;
+    
+    for (const strategy of strategies) {
+      console.log(`🔍 [SMART-SEARCH] Trying strategy: ${strategy.name}`);
+      console.log(`📋 [SMART-SEARCH] Params:`, JSON.stringify(strategy.params, null, 2));
+      
+      try {
+        const results = await this.search(strategy.params);
+        
+        if (results && results.length > 0) {
+          console.log(`✅ [SMART-SEARCH] Strategy "${strategy.name}" returned ${results.length} results`);
+          allResults = results;
+          usedStrategy = strategy.name;
+          break; // Found results, stop trying
+        }
+        
+        console.log(`⚠️ [SMART-SEARCH] Strategy "${strategy.name}" returned 0 results`);
+      } catch (error) {
+        console.error(`❌ [SMART-SEARCH] Strategy "${strategy.name}" failed:`, error.message);
+      }
+    }
+    
+    // If all strategies failed, return empty with metadata
+    return {
+      results: allResults,
+      usedStrategy: usedStrategy || 'none',
+      totalStrategiesTried: strategies.length
+    };
+  }
+
+  /**
+   * Build search strategies from most specific to broadest
+   * @param {Object} params - Original search parameters
+   * @returns {Array} Array of search strategies
+   */
+  buildSearchStrategies(params) {
+    const strategies = [];
+    const keywords = params.keywords || '';
+    const words = keywords.split(/\s+/).filter(w => w.length > 1);
+    
+    // Strategy 1: Full phrase with all params (most specific)
+    if (keywords) {
+      strategies.push({
+        name: 'full_phrase',
+        params: { ...params }
+      });
+    }
+    
+    // Strategy 2: Try each word individually (for Arabic word variations)
+    if (words.length > 1) {
+      words.forEach((word, index) => {
+        strategies.push({
+          name: `single_word_${index + 1}`,
+          params: { ...params, keywords: word }
+        });
+      });
+    }
+    
+    // Strategy 3: Category + Location only (no keywords)
+    if (params.category || params.city) {
+      const broadParams = { ...params };
+      delete broadParams.keywords;
+      strategies.push({
+        name: 'category_location_only',
+        params: broadParams
+      });
+    }
+    
+    // Strategy 4: Category only (broadest)
+    if (params.category) {
+      strategies.push({
+        name: 'category_only',
+        params: { category: params.category }
+      });
+    }
+    
+    return strategies;
   }
 }
 

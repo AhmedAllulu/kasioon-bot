@@ -1,4 +1,5 @@
 const logger = require('../../utils/logger');
+const MatchScorer = require('./matchScorer');
 
 /**
  * Professional Response Formatter
@@ -58,6 +59,12 @@ class ResponseFormatter {
   formatSingleListing(item, number, isArabic) {
     let listing = '';
 
+    // Match score badge (if available)
+    if (item.matchScore !== undefined) {
+      const badge = MatchScorer.getMatchBadge(item.matchScore, isArabic ? 'ar' : 'en');
+      listing += `${badge.emoji} *${item.matchScore}%* ${badge.text}\n`;
+    }
+
     // Number and title
     const title = item.title || (isArabic ? 'بدون عنوان' : 'No title');
     listing += `${number}️⃣ *${this.escapeMarkdown(title)}*\n`;
@@ -85,8 +92,32 @@ class ResponseFormatter {
         : `   💰 Price: ${formattedPrice}\n`;
     }
 
-    // Location
-    const location = item.location?.city?.name || item.city?.name || item.location;
+    // Location - handle different API response structures
+    let location = null;
+    if (item.location) {
+      // Handle location object structure from API
+      if (typeof item.location === 'string') {
+        location = item.location;
+      } else if (item.location.city) {
+        // city can be string or object with name property
+        location = typeof item.location.city === 'string' 
+          ? item.location.city 
+          : item.location.city.name;
+        
+        // Add province if different from city
+        if (item.location.province && item.location.province !== location) {
+          location = `${location}, ${item.location.province}`;
+        }
+      } else if (item.location.province) {
+        location = item.location.province;
+      } else if (item.location.address) {
+        location = item.location.address;
+      }
+    } else if (item.city) {
+      // Fallback for direct city property
+      location = typeof item.city === 'string' ? item.city : item.city.name;
+    }
+    
     if (location) {
       listing += isArabic
         ? `   📍 الموقع: ${this.escapeMarkdown(location)}\n`
@@ -201,32 +232,70 @@ class ResponseFormatter {
   }
 
   /**
-   * Format price in Syrian Pounds
-   * @param {number} price - Price value
+   * Format price with proper unit display
+   * Handles both single prices and range prices
+   * @param {number|Object} priceAttribute - Price value or price object
    * @param {boolean} isArabic - Arabic language flag
    * @returns {string} Formatted price
    */
-  formatPrice(price, isArabic = true) {
-    if (!price || price === 0) {
+  formatPrice(priceAttribute, isArabic = true) {
+    if (!priceAttribute) {
       return isArabic ? 'غير محدد' : 'Not specified';
     }
 
-    // Format with commas
-    const formatted = new Intl.NumberFormat(isArabic ? 'ar-SY' : 'en-US').format(price);
+    // Handle price object with value and unit
+    if (typeof priceAttribute === 'object') {
+      const value = priceAttribute.value;
+      const unit_ar = priceAttribute.unit_ar || 'دولار';
+      const unit_en = priceAttribute.unit_en || 'USD';
 
+      // Handle range prices
+      if (typeof value === 'object' && value.min !== undefined) {
+        const minFormatted = this.formatNumber(value.min, isArabic);
+        const maxFormatted = this.formatNumber(value.max, isArabic);
+        const unit = isArabic ? unit_ar : unit_en;
+        return `${minFormatted} - ${maxFormatted} ${unit}`;
+      }
+
+      // Handle single price with unit
+      const numValue = parseFloat(value);
+      if (!isNaN(numValue)) {
+        const formatted = this.formatNumber(numValue, isArabic);
+        const unit = isArabic ? unit_ar : unit_en;
+        return `${formatted} ${unit}`;
+      }
+    }
+
+    // Handle simple number (backward compatibility)
+    const numValue = parseFloat(priceAttribute);
+    if (isNaN(numValue) || numValue === 0) {
+      return isArabic ? 'غير محدد' : 'Not specified';
+    }
+
+    const formatted = this.formatNumber(numValue, isArabic);
     return isArabic
       ? `${formatted} ل.س`  // Syrian Pounds
       : `SYP ${formatted}`;
   }
 
   /**
-   * Format number with locale
+   * Format number with locale and fix float precision
    * @param {number} num - Number to format
    * @param {boolean} isArabic - Arabic language flag
    * @returns {string} Formatted number
    */
   formatNumber(num, isArabic = true) {
-    return new Intl.NumberFormat(isArabic ? 'ar' : 'en').format(num);
+    if (num === null || num === undefined) return '';
+
+    // Fix float precision issues (e.g., 3500.0000000000005 → 3500)
+    const fixed = Math.round(num * 100) / 100;
+
+    // Format with Arabic locale for large numbers
+    if (fixed >= 1000000) {
+      return new Intl.NumberFormat(isArabic ? 'ar-SA' : 'en-US').format(fixed);
+    }
+
+    return fixed.toLocaleString(isArabic ? 'ar-SA' : 'en-US');
   }
 
   /**
@@ -319,7 +388,7 @@ class ResponseFormatter {
   getFooterMessage(isArabic) {
     if (isArabic) {
       return `\n━━━━━━━━━━━━━━━━━━━━
-💡 أرسل رقم الإعلان لمزيد من التفاصيل
+💡 إضغط على عرض التفاصيل لرؤية كامل تفاصيل الإعلان
 🎤 يمكنك إرسال رسالة صوتية أيضاً
 🌐 ${this.websiteUrl}`;
     }

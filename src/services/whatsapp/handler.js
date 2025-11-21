@@ -98,11 +98,20 @@ class WhatsAppHandler {
         return;
       }
 
-      // Search marketplace
-      const results = await marketplaceSearch.search(searchParams);
+      // Search marketplace with smart fallback strategies, filter enrichment, and match scoring
+      const searchResponse = await aiAgent.searchMarketplace(searchParams, text, detectedLanguage);
+      const { results, filterDescription } = searchResponse;
 
       // Format results - pass original message for language detection
-      const formattedMessage = await aiAgent.formatResults(results, detectedLanguage, text);
+      let formattedMessage = await aiAgent.formatResults(results, detectedLanguage, text);
+
+      // Add filter description if filters were matched
+      if (filterDescription && results.length > 0) {
+        const filterHeader = detectedLanguage === 'ar'
+          ? `\n🔍 فلاتر البحث المطبقة:\n${filterDescription}\n\n`
+          : `\n🔍 Applied search filters:\n${filterDescription}\n\n`;
+        formattedMessage = filterHeader + formattedMessage;
+      }
 
       // Send results (split if necessary)
       await this.sendLongMessage(phoneNumber, formattedMessage);
