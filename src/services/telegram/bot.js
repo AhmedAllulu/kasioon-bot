@@ -4,6 +4,8 @@ const logger = require('../../utils/logger');
 const aiAgent = require('../ai/agent');
 const marketplaceSearch = require('../search/marketplaceSearch');
 const audioProcessor = require('../audio/processor');
+const responseFormatter = require('../ai/responseFormatter');
+const searchHistory = require('../db/searchHistory');
 
 class TelegramBot {
   constructor() {
@@ -21,34 +23,143 @@ class TelegramBot {
 
   setupHandlers() {
     // Start command
-    this.bot.start((ctx) => {
+    this.bot.start(async (ctx) => {
       console.log('📱 [TELEGRAM] Received /start command from user:', {
         id: ctx.from.id,
         username: ctx.from.username || 'N/A',
         first_name: ctx.from.first_name,
         language: ctx.from.language_code
       });
-      
-      const welcomeMessage = ctx.from.language_code === 'ar'
-        ? `مرحباً ${ctx.from.first_name}! 👋\n\nأنا بوت البحث في سوق kasioon.com. أستطيع مساعدتك في العثور على ما تبحث عنه.\n\nفقط أخبرني ما تبحث عنه، مثل:\n"أريد سيارة تويوتا في حلب"\n"شقة للبيع في دمشق"\n"لابتوب مستعمل"\n"أثاث غرفة نوم"\n\nيمكنك أيضاً إرسال رسالة صوتية! 🎤`
-        : `Welcome ${ctx.from.first_name}! 👋\n\nI'm the kasioon.com marketplace search bot. I can help you find what you're looking for.\n\nJust tell me what you need, like:\n"I want a Toyota car in Aleppo"\n"Apartment for sale in Damascus"\n"Used laptop"\n"Bedroom furniture"\n\nYou can also send a voice message! 🎤`;
-      
-      ctx.reply(welcomeMessage);
+
+      const userId = ctx.from.id.toString();
+      const userPrefs = await searchHistory.getUserPreferences(userId);
+      const language = userPrefs?.preferred_language || ctx.from.language_code || 'ar';
+
+      const welcomeMessage = responseFormatter.formatWelcome(ctx.from.first_name, language);
+
+      await ctx.reply(welcomeMessage, { parse_mode: 'Markdown' });
     });
 
     // Help command
-    this.bot.help((ctx) => {
+    this.bot.help(async (ctx) => {
       console.log('📱 [TELEGRAM] Received /help command from user:', {
         id: ctx.from.id,
         username: ctx.from.username || 'N/A',
         first_name: ctx.from.first_name
       });
-      
-      const helpMessage = ctx.from.language_code === 'ar'
-        ? `كيف تستخدم البوت:\n\n1️⃣ أرسل رسالة نصية تصف ما تبحث عنه\n2️⃣ أو أرسل رسالة صوتية\n3️⃣ سأقوم بالبحث وإرسال النتائج لك\n\nأمثلة:\n• "أريد سيارة تويوتا في حلب"\n• "شقة للإيجار في دمشق"\n• "موبايل آيفون"\n• "أثاث مستعمل"`
-        : `How to use the bot:\n\n1️⃣ Send a text message describing what you're looking for\n2️⃣ Or send a voice message\n3️⃣ I'll search and send you the results\n\nExamples:\n• "I want a Toyota car in Aleppo"\n• "Apartment for rent in Damascus"\n• "iPhone mobile"\n• "Used furniture"`;
-      
-      ctx.reply(helpMessage);
+
+      const language = ctx.from.language_code || 'ar';
+      const isArabic = language === 'ar';
+
+      const helpMessage = isArabic
+        ? `📖 *دليل الاستخدام*
+
+*البحث النصي:*
+اكتب ما تبحث عنه بشكل طبيعي
+مثال: "سيارة مرسيدس موديل 2020 في دمشق"
+
+*البحث الصوتي:*
+أرسل رسالة صوتية وسأفهم طلبك
+
+*فلاتر البحث:*
+• الفئة: سيارات، عقارات، إلكترونيات...
+• المدينة: دمشق، حلب، حمص...
+• السعر: "بسعر أقل من 1000000"
+• المواصفات: "3 غرف"، "موديل 2022"
+
+*أوامر مفيدة:*
+/start - البدء من جديد
+/help - عرض المساعدة
+/recent - آخر عمليات البحث
+/trending - الأكثر بحثاً
+
+🌐 kasioon.com`
+        : `📖 *User Guide*
+
+*Text Search:*
+Type what you're looking for naturally
+Example: "Mercedes car 2020 model in Damascus"
+
+*Voice Search:*
+Send a voice message and I'll understand
+
+*Search Filters:*
+• Category: cars, real estate, electronics...
+• City: Damascus, Aleppo, Homs...
+• Price: "under 1000000"
+• Specs: "3 rooms", "2022 model"
+
+*Useful Commands:*
+/start - Start over
+/help - Show help
+/recent - Recent searches
+/trending - Trending searches
+
+🌐 kasioon.com`;
+
+      await ctx.reply(helpMessage, { parse_mode: 'Markdown' });
+    });
+
+    // Recent searches command
+    this.bot.command('recent', async (ctx) => {
+      const userId = ctx.from.id.toString();
+      const language = ctx.from.language_code || 'ar';
+      const isArabic = language === 'ar';
+
+      try {
+        const recentSearches = await searchHistory.getRecentSearches(userId, 5);
+
+        if (recentSearches.length === 0) {
+          await ctx.reply(isArabic
+            ? '📭 لا توجد عمليات بحث سابقة'
+            : '📭 No previous searches');
+          return;
+        }
+
+        let message = isArabic ? '🕐 *آخر عمليات البحث:*\n\n' : '🕐 *Recent searches:*\n\n';
+        recentSearches.forEach((search, index) => {
+          const date = new Date(search.created_at).toLocaleDateString(isArabic ? 'ar-SY' : 'en-US');
+          message += `${index + 1}. ${search.query_text}\n`;
+          message += `   📊 ${search.results_count} ${isArabic ? 'نتيجة' : 'results'}`;
+          if (search.category) message += ` • ${search.category}`;
+          if (search.city) message += ` • ${search.city}`;
+          message += `\n   📅 ${date}\n\n`;
+        });
+
+        await ctx.reply(message, { parse_mode: 'Markdown' });
+      } catch (error) {
+        logger.error('Error fetching recent searches:', error);
+        await ctx.reply(responseFormatter.formatError('api_error', language));
+      }
+    });
+
+    // Trending searches command
+    this.bot.command('trending', async (ctx) => {
+      const language = ctx.from.language_code || 'ar';
+      const isArabic = language === 'ar';
+
+      try {
+        const trending = await searchHistory.getTrendingSearches(10);
+
+        if (trending.length === 0) {
+          await ctx.reply(isArabic
+            ? '📊 لا توجد عمليات بحث رائجة حالياً'
+            : '📊 No trending searches currently');
+          return;
+        }
+
+        let message = isArabic ? '🔥 *الأكثر بحثاً اليوم:*\n\n' : '🔥 *Trending today:*\n\n';
+        trending.forEach((search, index) => {
+          message += `${index + 1}. ${search.query_text}`;
+          if (search.category) message += ` (${search.category})`;
+          message += ` • ${search.search_count} ${isArabic ? 'مرات' : 'times'}\n`;
+        });
+
+        await ctx.reply(message, { parse_mode: 'Markdown' });
+      } catch (error) {
+        logger.error('Error fetching trending searches:', error);
+        await ctx.reply(responseFormatter.formatError('api_error', language));
+      }
     });
 
     // Text messages
@@ -86,113 +197,94 @@ class TelegramBot {
   }
 
   async handleTextMessage(ctx) {
+    const startTime = Date.now();
+    const userId = ctx.from.id.toString();
+    const userMessage = ctx.message.text;
+
     try {
-      const userMessage = ctx.message.text;
-      const userId = ctx.from.id;
-      
-      // Detect language from message content, not user settings
-      const detectLanguage = (text) => {
-        if (!text || typeof text !== 'string') return 'ar';
-        const arabicPattern = /[\u0600-\u06FF]/;
-        const hasArabic = arabicPattern.test(text);
-        const arabicChars = (text.match(/[\u0600-\u06FF]/g) || []).length;
-        const englishChars = (text.match(/[a-zA-Z]/g) || []).length;
-        if (hasArabic && arabicChars > text.length * 0.1) return 'ar';
-        if (englishChars > text.length * 0.5) return 'en';
-        return 'ar';
-      };
-      
-      const detectedLanguage = detectLanguage(userMessage);
-      const language = detectedLanguage; // Use detected language
-
-      console.log('💬 [TELEGRAM] Processing text message:', {
-        user_id: userId,
-        message: userMessage,
-        detected_language: detectedLanguage,
-        user_language_code: ctx.from.language_code
-      });
-
-      logger.info(`Received text message from user ${userId}:`, userMessage);
-
-      // Send typing action
-      console.log('⌨️  [TELEGRAM] Sending typing indicator...');
+      // Send typing indicator
       await ctx.sendChatAction('typing');
+
+      // Detect language
+      const language = this.detectLanguage(userMessage);
+
+      logger.info(`[TELEGRAM] Processing message from user ${userId}:`, userMessage);
+
+      // Check for greetings or simple responses
+      if (this.isGreeting(userMessage)) {
+        const greeting = responseFormatter.formatGreeting(ctx.from.first_name, language);
+        await ctx.reply(greeting, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      // Check DB cache for popular searches first
+      const cachedResults = await searchHistory.getCachedResults(userMessage);
+      if (cachedResults) {
+        logger.info('[TELEGRAM] Using cached results');
+        const formatted = responseFormatter.formatSearchResults(cachedResults, language);
+        await this.sendFormattedMessage(ctx, formatted);
+
+        // Still log the search
+        await searchHistory.logSearch({
+          userId,
+          queryText: userMessage,
+          resultsCount: cachedResults.length,
+          responseTimeMs: Date.now() - startTime,
+          language
+        });
+        return;
+      }
+
+      // Send "searching" message
+      const searchingMsg = await ctx.reply(
+        language === 'ar' ? '🔍 جاري البحث...' : '🔍 Searching...'
+      );
 
       // Analyze message with AI
-      console.log('🤖 [AI] Starting message analysis...');
-      console.log('📝 [AI] Input:', {
-        message: userMessage,
-        language: language
-      });
-      
-      const searchParams = await aiAgent.analyzeMessage(userMessage, language);
-
-      console.log('✅ [AI] Analysis complete!');
-      console.log('📊 [AI] Extracted parameters:', JSON.stringify(searchParams, null, 2));
-      logger.info('Extracted search params:', searchParams);
-
-      // Check if we have any search parameters
-      if (Object.keys(searchParams).length === 0) {
-        console.log('⚠️  [AI] No search parameters extracted!');
-        const noParamsMessage = language === 'ar'
-          ? 'عذراً، لم أفهم طلبك. يرجى تحديد ما تبحث عنه بوضوح أكثر.\nمثال: "أريد تويوتا في حلب"'
-          : 'Sorry, I didn\'t understand your request. Please specify what you\'re looking for more clearly.\nExample: "I want a Toyota in Aleppo"';
-        
-        return ctx.reply(noParamsMessage);
-      }
+      const extractedParams = await aiAgent.analyzeMessage(userMessage, language);
+      logger.info('[AI] Extracted params:', extractedParams);
 
       // Search marketplace
-      console.log('🔍 [SEARCH] Starting marketplace search...');
-      console.log('📋 [SEARCH] Search parameters:', JSON.stringify(searchParams, null, 2));
-      
-      await ctx.sendChatAction('typing');
-      const results = await marketplaceSearch.search(searchParams);
-      
-      console.log('✅ [SEARCH] Search complete!');
-      console.log('📊 [SEARCH] Results:', {
-        count: results.length,
-        sample: results.length > 0 ? results[0] : null
-      });
+      const results = await marketplaceSearch.search(extractedParams);
 
-      // Format and send results
-      console.log('📝 [AI] Formatting results for user...');
-      console.log('📊 [AI] Formatting:', {
-        results_count: results.length,
-        language: language
-      });
-      
-      // Pass the original user message so AI can detect and match the language
-      const formattedMessage = await aiAgent.formatResults(results, language, userMessage);
-      
-      console.log('✅ [AI] Formatting complete!');
-      console.log('📄 [AI] Formatted message length:', formattedMessage.length);
-      console.log('📄 [AI] Formatted message preview:', formattedMessage.substring(0, 200) + '...');
-      
-      console.log('✅ [TELEGRAM] Sending response:', {
-        user_id: userId,
-        results_count: results.length,
-        message_length: formattedMessage.length
-      });
-      
-      // Split message if too long (Telegram limit is 4096 characters)
-      if (formattedMessage.length > 4000) {
-        const chunks = this.splitMessage(formattedMessage, 4000);
-        console.log(`📤 [TELEGRAM] Splitting message into ${chunks.length} chunks`);
-        for (const chunk of chunks) {
-          await ctx.reply(chunk);
+      // Format response
+      let formattedMessage;
+      if (results.length > 0) {
+        formattedMessage = responseFormatter.formatSearchResults(results, language);
+
+        // Cache results if enough results
+        if (results.length >= 3) {
+          await searchHistory.cacheResults(userMessage, results);
         }
       } else {
-        await ctx.reply(formattedMessage);
+        formattedMessage = responseFormatter.getNoResultsMessage(language);
       }
 
-    } catch (error) {
-      console.error('❌ [ERROR] Error in handleTextMessage:', {
-        message: error.message,
-        stack: error.stack,
-        user_id: userId
+      // Delete "searching" message and send results
+      await ctx.deleteMessage(searchingMsg.message_id).catch(() => {});
+      await this.sendFormattedMessage(ctx, formattedMessage);
+
+      // Log search to database
+      const responseTime = Date.now() - startTime;
+      await searchHistory.logSearch({
+        userId,
+        platform: 'telegram',
+        queryText: userMessage,
+        extractedParams,
+        resultsCount: results.length,
+        responseTimeMs: responseTime,
+        category: extractedParams.category,
+        city: extractedParams.city,
+        language
       });
-      logger.error('Error handling text message:', error);
-      ctx.reply('عذراً، حدث خطأ أثناء البحث. يرجى المحاولة مرة أخرى.\nSorry, an error occurred during the search. Please try again.');
+
+      logger.info(`[TELEGRAM] Response sent in ${responseTime}ms`);
+
+
+    } catch (error) {
+      logger.error('[TELEGRAM] Error handling text message:', error);
+      const language = this.detectLanguage(userMessage);
+      await ctx.reply(responseFormatter.formatError('search_error', language));
     }
   }
 
@@ -257,6 +349,29 @@ class TelegramBot {
     }
   }
 
+  /**
+   * Send formatted message, splitting if too long
+   * @param {Object} ctx - Telegraf context
+   * @param {string} message - Message to send
+   */
+  async sendFormattedMessage(ctx, message) {
+    // Split long messages
+    if (message.length > 4000) {
+      const chunks = this.splitMessage(message, 4000);
+      for (const chunk of chunks) {
+        await ctx.reply(chunk, { parse_mode: 'Markdown', disable_web_page_preview: true });
+      }
+    } else {
+      await ctx.reply(message, { parse_mode: 'Markdown', disable_web_page_preview: true });
+    }
+  }
+
+  /**
+   * Split message into chunks
+   * @param {string} message - Message to split
+   * @param {number} maxLength - Maximum chunk length
+   * @returns {Array<string>} Message chunks
+   */
   splitMessage(message, maxLength) {
     const chunks = [];
     let currentChunk = '';
@@ -264,15 +379,45 @@ class TelegramBot {
 
     for (const line of lines) {
       if ((currentChunk + line + '\n').length > maxLength) {
-        if (currentChunk) chunks.push(currentChunk);
+        if (currentChunk) chunks.push(currentChunk.trim());
         currentChunk = line + '\n';
       } else {
         currentChunk += line + '\n';
       }
     }
 
-    if (currentChunk) chunks.push(currentChunk);
+    if (currentChunk) chunks.push(currentChunk.trim());
     return chunks;
+  }
+
+  /**
+   * Detect language from text
+   * @param {string} text - Text to analyze
+   * @returns {string} Language code ('ar' or 'en')
+   */
+  detectLanguage(text) {
+    if (!text || typeof text !== 'string') return 'ar';
+    const arabicPattern = /[\u0600-\u06FF]/;
+    const hasArabic = arabicPattern.test(text);
+    const arabicChars = (text.match(/[\u0600-\u06FF]/g) || []).length;
+    const totalChars = text.replace(/\s/g, '').length;
+
+    if (hasArabic && arabicChars > totalChars * 0.3) return 'ar';
+    return 'en';
+  }
+
+  /**
+   * Check if message is a greeting
+   * @param {string} text - Message text
+   * @returns {boolean} True if greeting
+   */
+  isGreeting(text) {
+    const greetings = [
+      'مرحبا', 'اهلا', 'السلام', 'هاي', 'صباح', 'مساء', 'هلا',
+      'hello', 'hi', 'hey', 'good morning', 'good evening'
+    ];
+    const lowerText = text.toLowerCase();
+    return greetings.some(g => lowerText.includes(g)) && text.length < 30;
   }
 
   async launch() {

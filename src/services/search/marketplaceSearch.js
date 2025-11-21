@@ -628,6 +628,241 @@ class MarketplaceSearchService {
       return fallbackCategories;
     }
   }
+
+  /**
+   * Load complete search structure (categories, locations, transaction types)
+   * This gives the AI full context about available options
+   * @returns {Promise<Object|null>} Search structure or null
+   */
+  async loadSearchStructure() {
+    try {
+      // Check cache first
+      const cacheKey = `structure:${this.language}`;
+      const cached = await cache.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+
+      const endpoint = `${this.apiUrl}/api/search/structure`;
+      const response = await axios.get(endpoint, {
+        params: { language: this.language },
+        headers: this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
+        timeout: 15000
+      });
+
+      if (response.data?.data?.structure) {
+        const structure = response.data.data.structure;
+        // Cache for 30 minutes
+        await cache.setex(cacheKey, 1800, JSON.stringify(structure));
+        logger.info('Search structure loaded and cached');
+        return structure;
+      }
+
+      return null;
+    } catch (error) {
+      logger.error('Failed to load search structure:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Get provinces list
+   * @returns {Promise<Array>} List of provinces
+   */
+  async getProvinces() {
+    try {
+      const cacheKey = `provinces:${this.language}`;
+      const cached = await cache.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const response = await axios.get(`${this.apiUrl}/api/cities/provinces`, {
+        params: { language: this.language },
+        headers: this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
+        timeout: 10000
+      });
+
+      if (response.data?.data?.provinces) {
+        await cache.setex(cacheKey, 3600, JSON.stringify(response.data.data.provinces));
+        return response.data.data.provinces;
+      }
+      return [];
+    } catch (error) {
+      logger.error('Failed to load provinces:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get cities by province
+   * @param {string} province - Province name
+   * @returns {Promise<Array>} List of cities
+   */
+  async getCitiesByProvince(province) {
+    try {
+      const cacheKey = `cities:${province}:${this.language}`;
+      const cached = await cache.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const response = await axios.get(
+        `${this.apiUrl}/api/cities/provinces/${encodeURIComponent(province)}/cities`,
+        {
+          params: { language: this.language },
+          headers: this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
+          timeout: 10000
+        }
+      );
+
+      if (response.data?.data?.cities) {
+        await cache.setex(cacheKey, 3600, JSON.stringify(response.data.data.cities));
+        return response.data.data.cities;
+      }
+      return [];
+    } catch (error) {
+      logger.error(`Failed to load cities for ${province}:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get category filters/attributes
+   * @param {string} categorySlug - Category slug
+   * @returns {Promise<Object|null>} Category filters or null
+   */
+  async getCategoryFilters(categorySlug) {
+    try {
+      const cacheKey = `filters:${categorySlug}:${this.language}`;
+      const cached = await cache.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      const response = await axios.get(
+        `${this.apiUrl}/api/search/filters/${encodeURIComponent(categorySlug)}`,
+        {
+          params: { language: this.language },
+          headers: this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
+          timeout: 10000
+        }
+      );
+
+      if (response.data?.data) {
+        await cache.setex(cacheKey, 1800, JSON.stringify(response.data.data));
+        return response.data.data;
+      }
+      return null;
+    } catch (error) {
+      logger.error(`Failed to load filters for ${categorySlug}:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Enhanced search with suggestions fallback
+   * @param {Object} params - Search parameters
+   * @returns {Promise<Object>} Search results with suggestions
+   */
+  async searchWithSuggestions(params) {
+    // Primary search
+    const results = await this.search(params);
+
+    // If no results, try broader search for suggestions
+    if (results.length === 0) {
+      const suggestions = await this.getSuggestions(params);
+      return {
+        listings: [],
+        suggestions,
+        message: 'no_results_with_suggestions'
+      };
+    }
+
+    return {
+      listings: results,
+      suggestions: [],
+      message: 'success'
+    };
+  }
+
+  /**
+   * Get search suggestions when exact match not found
+   * @param {Object} originalParams - Original search parameters
+   * @returns {Promise<Array>} Array of suggestions
+   */
+  async getSuggestions(originalParams) {
+    const suggestions = [];
+
+    try {
+      // Suggestion 1: Try removing price constraints
+      if (originalParams.minPrice || originalParams.maxPrice) {
+        const withoutPrice = { ...originalParams };
+        delete withoutPrice.minPrice;
+        delete withoutPrice.maxPrice;
+        const results = await this.search(withoutPrice);
+        if (results.length > 0) {
+          suggestions.push({
+            type: 'without_price_filter',
+            count: results.length,
+            listings: results.slice(0, 3)
+          });
+        }
+      }
+
+      // Suggestion 2: Try parent category
+      if (originalParams.category) {
+        const structure = await this.loadSearchStructure();
+        if (structure?.categories) {
+          const parentCategory = this.findParentCategory(originalParams.category, structure.categories);
+          if (parentCategory) {
+            const withParent = { ...originalParams, category: parentCategory.slug };
+            const results = await this.search(withParent);
+            if (results.length > 0) {
+              suggestions.push({
+                type: 'parent_category',
+                category: parentCategory,
+                count: results.length,
+                listings: results.slice(0, 3)
+              });
+            }
+          }
+        }
+      }
+
+      // Suggestion 3: Try nearby cities (expand to whole province or all cities)
+      if (originalParams.city) {
+        const withoutCity = { ...originalParams };
+        delete withoutCity.city;
+        const results = await this.search(withoutCity);
+        if (results.length > 0) {
+          suggestions.push({
+            type: 'all_cities',
+            count: results.length,
+            listings: results.slice(0, 3)
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('Error getting suggestions:', error);
+    }
+
+    return suggestions;
+  }
+
+  /**
+   * Find parent category in category tree
+   * @param {string} categorySlug - Category slug to find parent for
+   * @param {Array} categories - Categories array
+   * @param {Object} parent - Parent category (used recursively)
+   * @returns {Object|null} Parent category or null
+   */
+  findParentCategory(categorySlug, categories, parent = null) {
+    for (const cat of categories) {
+      if (cat.slug === categorySlug) {
+        return parent;
+      }
+      if (cat.children && cat.children.length > 0) {
+        const found = this.findParentCategory(categorySlug, cat.children, cat);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
 }
 
 module.exports = new MarketplaceSearchService();

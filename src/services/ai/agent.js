@@ -2,6 +2,8 @@ const OpenAI = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
 const logger = require('../../utils/logger');
 const marketplaceSearch = require('../search/marketplaceSearch');
+const modelManager = require('./modelManager');
+const cache = require('../cache');
 
 /**
  * Detect language from text message
@@ -47,17 +49,12 @@ class AIAgent {
     }) : null;
 
     this.provider = process.env.AI_PROVIDER || 'openai'; // 'openai' or 'anthropic'
-    
-    // Model configuration - use environment variable or fallback to accessible models
-    this.openaiModel = process.env.OPENAI_MODEL || 'gpt-5-mini'; // Default to gpt-5-mini (more accessible)
-    this.anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
-    
+
     console.log('🤖 [AI] AI Agent initialized:', {
       provider: this.provider,
-      openaiModel: this.openaiModel,
-      anthropicModel: this.anthropicModel,
       hasOpenAI: !!this.openai,
-      hasAnthropic: !!this.anthropic
+      hasAnthropic: !!this.anthropic,
+      modelManager: 'enabled'
     });
   }
 
@@ -68,14 +65,26 @@ class AIAgent {
    * @returns {Promise<Object>} Extracted search parameters
    */
   async analyzeMessage(message, language = 'ar') {
+    const taskType = 'extract_params';
+
     try {
+      // Check cache for similar queries (cost saving)
+      if (modelManager.shouldCache(taskType)) {
+        const cacheKey = `ai:params:${this.hashString(message)}`;
+        const cached = await cache.get(cacheKey);
+        if (cached) {
+          logger.info('✅ [AI-ANALYZE] Using cached response for parameter extraction');
+          return JSON.parse(cached);
+        }
+      }
+
       console.log('🤖 [AI-ANALYZE] Starting analysis...');
       console.log('📥 [AI-ANALYZE] Input:', {
         message: message,
         language: language,
         provider: this.provider
       });
-      
+
       // Step 1: Fetch root categories first
       console.log('📂 [AI-ANALYZE] Fetching root categories...');
       let categories = [];
@@ -148,11 +157,14 @@ Response: {"category": "electronics", "keywords": "لابتوب", "condition": "
       let extractedParams;
 
       if (this.provider === 'anthropic' && this.anthropic) {
+        const model = modelManager.getModel(taskType, 'anthropic');
+        const maxTokens = modelManager.getMaxTokens(taskType);
+
         console.log('🔵 [AI-ANALYZE] Using Anthropic Claude...');
-        console.log('🤖 [AI-ANALYZE] Model:', this.anthropicModel);
+        console.log('🤖 [AI-ANALYZE] Model:', model);
         const response = await this.anthropic.messages.create({
-          model: this.anthropicModel,
-          max_tokens: 1024,
+          model: model,
+          max_tokens: maxTokens,
           messages: [
             {
               role: 'user',
@@ -166,36 +178,44 @@ Response: {"category": "electronics", "keywords": "لابتوب", "condition": "
         console.log('📄 [AI-ANALYZE] Raw response:', content);
         extractedParams = JSON.parse(content);
 
+        // Track usage
+        modelManager.trackUsage(taskType, response.usage?.output_tokens || maxTokens, model);
+
       } else if (this.openai) {
+        const model = modelManager.getModel(taskType, 'openai');
+
         console.log('🟢 [AI-ANALYZE] Using OpenAI GPT...');
-        console.log('🤖 [AI-ANALYZE] Model:', this.openaiModel);
-        
+        console.log('🤖 [AI-ANALYZE] Model:', model);
+
         try {
           // Build request parameters
           const requestParams = {
-            model: this.openaiModel,
+            model: model,
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: message }
             ],
             response_format: { type: 'json_object' }
           };
-          
+
           // Some models (like gpt-5-nano) don't support custom temperature
           // Only add temperature if model supports it
           const modelsWithoutTemperature = ['gpt-5-nano'];
-          if (!modelsWithoutTemperature.includes(this.openaiModel)) {
+          if (!modelsWithoutTemperature.includes(model)) {
             requestParams.temperature = 0.3;
           } else {
             console.log('⚠️  [AI-ANALYZE] Model does not support custom temperature, using default');
           }
-          
+
           const response = await this.openai.chat.completions.create(requestParams);
 
           console.log('✅ [AI-ANALYZE] OpenAI response received');
           const rawContent = response.choices[0].message.content;
           console.log('📄 [AI-ANALYZE] Raw response:', rawContent);
           extractedParams = JSON.parse(rawContent);
+
+          // Track usage
+          modelManager.trackUsage(taskType, response.usage?.total_tokens || 500, model);
         } catch (modelError) {
           // Check if it's a temperature error - retry without temperature
           if (modelError.message && modelError.message.includes('temperature') && 
@@ -317,6 +337,14 @@ Response: {"category": "electronics", "keywords": "لابتوب", "condition": "
       
       console.log('📊 [AI-ANALYZE] Final extracted params:', JSON.stringify(extractedParams, null, 2));
       logger.info('Message analyzed successfully', { extractedParams });
+
+      // Cache the result
+      if (modelManager.shouldCache(taskType)) {
+        const cacheKey = `ai:params:${this.hashString(message)}`;
+        const cacheTTL = modelManager.getCacheTTL(taskType);
+        await cache.setex(cacheKey, cacheTTL, JSON.stringify(extractedParams));
+      }
+
       return extractedParams;
 
     } catch (error) {
@@ -605,7 +633,7 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
   }
 
   /**
-   * Transcribe voice message to text
+   * Transcribe voice message to text using OpenAI Whisper
    * @param {Buffer} audioBuffer - Audio file buffer
    * @returns {Promise<string>} Transcribed text
    */
@@ -615,13 +643,16 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
         throw new Error('OpenAI is required for audio transcription');
       }
 
-      // Create a File-like object from buffer
-      const file = new File([audioBuffer], 'audio.ogg', { type: 'audio/ogg' });
+      // Import toFile helper from openai package for proper file handling
+      const { toFile } = require('openai');
+
+      // Create proper file object for OpenAI API
+      const file = await toFile(audioBuffer, 'audio.ogg', { type: 'audio/ogg' });
 
       const response = await this.openai.audio.transcriptions.create({
         file: file,
-        model: 'whisper-1',
-        language: 'ar' // Arabic by default, Whisper auto-detects
+        model: 'whisper-1'
+        // Language auto-detection - Whisper handles this better without hardcoding
       });
 
       logger.info('Audio transcribed successfully');
@@ -629,8 +660,32 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
 
     } catch (error) {
       logger.error('Error transcribing audio:', error);
-      throw error;
+
+      // Provide more context in error messages
+      if (error.message?.includes('Invalid file')) {
+        throw new Error('Audio file format is not supported. Please try again.');
+      }
+      if (error.message?.includes('timeout')) {
+        throw new Error('Audio transcription timed out. The file may be too large.');
+      }
+
+      throw new Error(`Failed to transcribe audio: ${error.message}`);
     }
+  }
+
+  /**
+   * Create a hash from a string for caching purposes
+   * @param {string} str - String to hash
+   * @returns {string} Hash string
+   */
+  hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash.toString(16);
   }
 }
 
