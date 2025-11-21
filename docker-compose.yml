@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  # n8n workflow automation
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: kasioon-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-changeme}
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://${N8N_HOST:-localhost}:5678/
+      - GENERIC_TIMEZONE=Asia/Damascus
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/home/node/.n8n/workflows
+    networks:
+      - kasioon-network
+    depends_on:
+      - postgres
+
+  # PostgreSQL database for n8n
+  postgres:
+    image: postgres:15-alpine
+    container_name: kasioon-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-n8n}
+      - POSTGRES_USER=${POSTGRES_USER:-n8n}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-n8npassword}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - kasioon-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-n8n}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Node.js backend API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kasioon-api
+    restart: unless-stopped
+    ports:
+      - "3355:3355"
+    environment:
+      - NODE_ENV=production
+      - PORT=3355
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-n8n}:${POSTGRES_PASSWORD:-n8npassword}@postgres:5432/${POSTGRES_DB:-n8n}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - WHATSAPP_API_TOKEN=${WHATSAPP_API_TOKEN}
+      - WHATSAPP_PHONE_NUMBER_ID=${WHATSAPP_PHONE_NUMBER_ID}
+      - N8N_WEBHOOK_URL=http://n8n:5678
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    networks:
+      - kasioon-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: kasioon-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - kasioon-network
+    command: redis-server --appendonly yes
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: kasioon-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    networks:
+      - kasioon-network
+    depends_on:
+      - api
+      - n8n
+
+volumes:
+  n8n_data:
+  postgres_data:
+  redis_data:
+
+networks:
+  kasioon-network:
+    driver: bridge
+

@@ -1,0 +1,175 @@
+kasioon-bot/
+├── docker-compose.yml          # Docker orchestration configuration
+├── Dockerfile                  # Node.js API container definition
+├── package.json                # Node.js dependencies
+├── .env.template              # Environment variables template
+├── .gitignore                 # Git ignore rules
+│
+├── deploy.sh                  # Main deployment script
+├── setup-telegram.sh          # Telegram webhook setup script
+├── test-api.sh               # API testing script
+│
+├── QUICKSTART.txt            # Quick start guide
+├── DEPLOYMENT.txt            # Full deployment guide
+├── API_DOCUMENTATION.txt     # API endpoints documentation
+├── project-structure.txt     # This file
+│
+├── src/                       # Application source code
+│   ├── server.js             # Main Express server
+│   │
+│   ├── middleware/           # Express middleware
+│   │   ├── errorHandler.js  # Global error handler
+│   │   └── rateLimiter.js   # Rate limiting middleware
+│   │
+│   ├── routes/              # API route handlers
+│   │   ├── api.js          # Main API routes
+│   │   ├── telegram.js     # Telegram webhook routes
+│   │   ├── whatsapp.js     # WhatsApp webhook routes
+│   │   └── webhooks.js     # Generic webhook routes
+│   │
+│   ├── services/            # Business logic services
+│   │   ├── ai/             # AI services
+│   │   │   └── agent.js    # AI agent (OpenAI/Anthropic)
+│   │   │
+│   │   ├── telegram/       # Telegram bot
+│   │   │   └── bot.js      # Telegram bot implementation
+│   │   │
+│   │   ├── whatsapp/       # WhatsApp handler
+│   │   │   └── handler.js  # WhatsApp message handler
+│   │   │
+│   │   ├── search/         # Marketplace search service
+│   │   │   └── marketplaceSearch.js # Kasioon.com API integration (TODO)
+│   │   │
+│   │   ├── audio/          # Audio processing
+│   │   │   └── processor.js # Audio download & conversion
+│   │   │
+│   │   ├── redis.js        # Redis client
+│   │   └── cache.js        # Caching service
+│   │
+│   └── utils/               # Utility functions
+│       └── logger.js        # Winston logger configuration
+│
+├── nginx/                    # Nginx reverse proxy
+│   ├── nginx.conf           # Nginx configuration
+│   └── ssl/                 # SSL certificates directory
+│
+├── n8n/                     # n8n workflow automation
+│   └── workflows/           # Workflow definitions
+│       ├── telegram-car-search.json
+│       └── whatsapp-car-search.json
+│
+├── logs/                    # Application logs (created at runtime)
+│   ├── error.log
+│   └── combined.log
+│
+└── uploads/                 # Uploaded files (created at runtime)
+
+
+DOCKER CONTAINERS:
+==================
+
+1. kasioon-api        - Node.js Express API (Port 3355)
+2. kasioon-n8n        - n8n workflow automation (Port 5678)
+3. kasioon-postgres   - PostgreSQL database (Port 5432)
+4. kasioon-redis      - Redis cache (Port 6379)
+5. kasioon-nginx      - Nginx reverse proxy (Port 80, 443)
+
+
+KEY FEATURES:
+=============
+
+✓ AI-Powered Message Analysis (OpenAI/Anthropic)
+✓ Telegram Bot Integration
+✓ WhatsApp Business API Integration (optional)
+✓ Voice Message Transcription (Whisper)
+✓ Kasioon.com Marketplace Search Integration (TODO: complete)
+✓ Redis Caching
+✓ n8n Workflow Automation
+✓ Rate Limiting & Security
+✓ Comprehensive Logging
+✓ Docker Compose Orchestration
+✓ Nginx Reverse Proxy
+✓ PostgreSQL Database
+
+
+TECH STACK:
+===========
+
+Backend:     Node.js + Express
+AI:          OpenAI GPT-4 / Anthropic Claude
+Bots:        Telegraf (Telegram), WhatsApp Web.js
+Database:    PostgreSQL
+Cache:       Redis
+Automation:  n8n
+Proxy:       Nginx
+Container:   Docker + Docker Compose
+Logging:     Winston
+
+
+WORKFLOW:
+=========
+
+1. User sends message (text/voice) via Telegram or WhatsApp
+2. Bot receives message and sends to API
+3. If voice: Transcribe using OpenAI Whisper
+4. AI Agent analyzes message and extracts search parameters
+5. Kasioon.com API is called with extracted parameters (TODO: implement)
+6. AI Agent formats results in user-friendly way
+7. Results sent back to user via Telegram or WhatsApp
+
+Optional: n8n can intercept and process messages with custom workflows
+
+
+PORTS:
+======
+
+3355  - Node.js API
+5678  - n8n interface
+5432  - PostgreSQL
+6379  - Redis
+80    - HTTP (Nginx)
+443   - HTTPS (Nginx)
+
+
+ENVIRONMENT VARIABLES:
+======================
+
+Required:
+- PORT=3355
+- OPENAI_API_KEY or ANTHROPIC_API_KEY
+- TELEGRAM_BOT_TOKEN
+- KASIOON_API_URL (TODO: update with actual API)
+- KASIOON_API_KEY (TODO: update when provided)
+
+Optional:
+- WHATSAPP_API_TOKEN
+- WHATSAPP_PHONE_NUMBER_ID
+- N8N_USER, N8N_PASSWORD
+- Various configuration options
+
+See: env-config.txt for complete list
+
+
+SECURITY FEATURES:
+==================
+
+✓ Rate limiting (100 req/15min per IP)
+✓ Helmet.js security headers
+✓ CORS protection
+✓ Environment variable isolation
+✓ Docker network isolation
+✓ Optional SSL/TLS support
+✓ Request validation
+✓ Error handling & logging
+
+
+SCALING OPTIONS:
+================
+
+- Add more API containers (load balancing)
+- Use Redis cluster for distributed caching
+- PostgreSQL replication for high availability
+- Horizontal scaling with Kubernetes
+- CDN for static assets
+- Separate AI service containers
+

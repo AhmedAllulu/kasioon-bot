@@ -1,0 +1,85 @@
+{
+  "name": "Telegram Marketplace Search Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "telegram-webhook"
+    },
+    {
+      "parameters": {
+        "url": "http://api:3355/api/analyze",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{ { \"message\": $json.message.text, \"language\": \"ar\" } }}"
+      },
+      "name": "Analyze Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://api:3355/api/search",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{ $json.params }}"
+      },
+      "name": "Search Marketplace",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $node[\"Webhook\"].json.message.chat.id }}",
+        "text": "={{ $json.results }}"
+      },
+      "name": "Send Response",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Analyze Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Message": {
+      "main": [
+        [
+          {
+            "node": "Search Cars",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Cars": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
+

@@ -1,0 +1,288 @@
+================================================================================
+                    KASIOON BOT - PM2 MANAGEMENT GUIDE
+================================================================================
+
+This guide covers running the Kasioon Bot using PM2 process manager.
+
+================================================================================
+INSTALLATION
+================================================================================
+
+1. Install PM2 globally:
+   npm install -g pm2
+
+2. Install project dependencies:
+   npm install
+
+3. Configure environment:
+   cp env-config.txt .env
+   nano .env
+   (Update with your actual credentials)
+
+================================================================================
+STARTING THE SERVER
+================================================================================
+
+Option 1: Using the start script (Recommended):
+   chmod +x pm2-start.sh
+   ./pm2-start.sh
+
+Option 2: Direct PM2 command:
+   pm2 start ecosystem.config.js --env production
+   pm2 save
+
+Option 3: Using PM2 directly:
+   pm2 start src/server.js --name kasioon-bot --env production
+
+================================================================================
+BASIC PM2 COMMANDS
+================================================================================
+
+View Status:
+   pm2 status
+   pm2 list
+
+View Logs:
+   pm2 logs kasioon-bot
+   pm2 logs kasioon-bot --lines 100    # Last 100 lines
+   pm2 logs kasioon-bot --err          # Error logs only
+   pm2 logs kasioon-bot --out          # Output logs only
+
+Monitor:
+   pm2 monit                           # Real-time monitoring
+
+Restart:
+   pm2 restart kasioon-bot
+   pm2 restart all
+
+Stop:
+   pm2 stop kasioon-bot
+   pm2 stop all
+
+Delete:
+   pm2 delete kasioon-bot
+   pm2 delete all
+
+Reload (Zero-downtime):
+   pm2 reload kasioon-bot
+
+================================================================================
+USING THE SCRIPTS
+================================================================================
+
+Start Server:
+   ./pm2-start.sh
+
+Stop Server:
+   ./pm2-stop.sh
+
+Restart Server:
+   ./pm2-restart.sh
+
+================================================================================
+AUTOMATIC STARTUP ON REBOOT
+================================================================================
+
+PM2 can automatically start your app on system reboot:
+
+1. Generate startup script:
+   pm2 startup systemd
+
+2. Follow the instructions shown (usually requires sudo)
+
+3. Save current PM2 process list:
+   pm2 save
+
+Now your app will automatically start on server reboot!
+
+To remove auto-startup:
+   pm2 unstartup systemd
+
+================================================================================
+MONITORING & LOGS
+================================================================================
+
+Log Locations:
+- PM2 logs: ./logs/pm2-*.log
+- Application logs: ./logs/combined.log, ./logs/error.log
+
+View Real-time Logs:
+   pm2 logs kasioon-bot --lines 50
+
+Follow Logs (like tail -f):
+   pm2 logs kasioon-bot
+
+Clear Logs:
+   pm2 flush kasioon-bot
+
+Monitor Resources:
+   pm2 monit
+
+View Detailed Info:
+   pm2 show kasioon-bot
+
+================================================================================
+ENVIRONMENT VARIABLES
+================================================================================
+
+The ecosystem.config.js file defines environment variables.
+
+To use different environments:
+
+Development:
+   pm2 start ecosystem.config.js --env development
+
+Production (default):
+   pm2 start ecosystem.config.js --env production
+
+Or set in .env file and load it:
+   export $(cat .env | grep -v '^#' | xargs)
+   pm2 start ecosystem.config.js
+
+================================================================================
+UPDATING THE APPLICATION
+================================================================================
+
+1. Pull latest code or make changes
+
+2. Install new dependencies (if any):
+   npm install
+
+3. Restart the app:
+   pm2 restart kasioon-bot
+
+Or use zero-downtime reload:
+   pm2 reload kasioon-bot
+
+4. Check logs:
+   pm2 logs kasioon-bot
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Problem: App won't start
+Solution:
+   - Check logs: pm2 logs kasioon-bot --err
+   - Verify .env file exists and is configured
+   - Check if port 3355 is available: netstat -tulpn | grep 3355
+   - Verify dependencies: npm install
+
+Problem: App keeps restarting
+Solution:
+   - Check error logs: pm2 logs kasioon-bot --err
+   - Check memory usage: pm2 monit
+   - Review max_memory_restart in ecosystem.config.js
+
+Problem: Can't access API
+Solution:
+   - Verify app is running: pm2 status
+   - Check if port is correct: pm2 show kasioon-bot
+   - Test health endpoint: curl http://localhost:3355/health
+   - Check firewall: sudo ufw status
+
+Problem: PM2 not found
+Solution:
+   npm install -g pm2
+   # Or use npx: npx pm2
+
+================================================================================
+ADVANCED CONFIGURATION
+================================================================================
+
+Cluster Mode (Multiple Instances):
+Edit ecosystem.config.js:
+   instances: 2,  # or 'max' for all CPU cores
+   exec_mode: 'cluster'
+
+Custom Log Format:
+   log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
+
+Memory Limits:
+   max_memory_restart: '1G'
+
+Restart Policies:
+   min_uptime: '10s'
+   max_restarts: 10
+   restart_delay: 4000
+
+================================================================================
+INTEGRATION WITH NGINX
+================================================================================
+
+If using Nginx as reverse proxy, update nginx.conf:
+
+   upstream api {
+       server localhost:3355;
+   }
+
+Then restart Nginx:
+   sudo systemctl restart nginx
+
+================================================================================
+PM2 VS DOCKER
+================================================================================
+
+PM2 (Current Setup):
+✓ Direct process management
+✓ Easier debugging
+✓ Lower resource overhead
+✓ Native system integration
+✓ Better for single-server deployments
+
+Docker (Alternative):
+✓ Container isolation
+✓ Easier multi-service orchestration
+✓ Better for microservices
+✓ Consistent environments
+
+You can use either approach based on your needs!
+
+================================================================================
+USEFUL PM2 COMMANDS SUMMARY
+================================================================================
+
+# Status & Info
+pm2 status
+pm2 list
+pm2 show kasioon-bot
+pm2 info kasioon-bot
+
+# Control
+pm2 start kasioon-bot
+pm2 stop kasioon-bot
+pm2 restart kasioon-bot
+pm2 reload kasioon-bot
+pm2 delete kasioon-bot
+
+# Logs
+pm2 logs kasioon-bot
+pm2 logs kasioon-bot --lines 100
+pm2 flush kasioon-bot
+
+# Monitoring
+pm2 monit
+pm2 describe kasioon-bot
+
+# Startup
+pm2 startup
+pm2 save
+pm2 unstartup
+
+# Other
+pm2 update
+pm2 kill
+
+================================================================================
+QUICK REFERENCE
+================================================================================
+
+Start:     ./pm2-start.sh
+Stop:      ./pm2-stop.sh
+Restart:   ./pm2-restart.sh
+Logs:      pm2 logs kasioon-bot
+Status:    pm2 status
+Monitor:   pm2 monit
+
+================================================================================
+

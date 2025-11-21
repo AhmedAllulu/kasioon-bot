@@ -1,0 +1,112 @@
+{
+  "name": "WhatsApp Marketplace Search Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "whatsapp-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.entry[0].changes[0].value.messages[0].type }}",
+              "operation": "equal",
+              "value2": "text"
+            }
+          ]
+        }
+      },
+      "name": "Is Text Message",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://api:3355/api/analyze",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ { \"message\": $json.entry[0].changes[0].value.messages[0].text.body, \"language\": \"ar\" } }}"
+      },
+      "name": "Analyze Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [650, 250]
+    },
+    {
+      "parameters": {
+        "url": "http://api:3355/api/search",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "={{ $json.params }}"
+      },
+      "name": "Search Marketplace",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [850, 250]
+    },
+    {
+      "parameters": {
+        "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
+        "toPhoneNumber": "={{ $node[\"Webhook\"].json.entry[0].changes[0].value.messages[0].from }}",
+        "message": "={{ $json.results }}"
+      },
+      "name": "Send WhatsApp Message",
+      "type": "n8n-nodes-base.whatsapp",
+      "typeVersion": 1,
+      "position": [1050, 250]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Is Text Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Text Message": {
+      "main": [
+        [
+          {
+            "node": "Analyze Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Message": {
+      "main": [
+        [
+          {
+            "node": "Search Cars",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Cars": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
+

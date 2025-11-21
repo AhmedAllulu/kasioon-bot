@@ -1,0 +1,56 @@
+{
+  "name": "kasioon-bot",
+  "version": "1.0.0",
+  "description": "AI-powered marketplace search bot for kasioon.com with Telegram and WhatsApp integration",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "jest",
+    "lint": "eslint src/**/*.js"
+  },
+  "keywords": [
+    "telegram",
+    "whatsapp",
+    "ai",
+    "bot",
+    "n8n",
+    "car-search"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.2",
+    "telegraf": "^4.15.0",
+    "whatsapp-web.js": "^1.23.0",
+    "openai": "^4.20.1",
+    "@anthropic-ai/sdk": "^0.9.1",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "winston": "^3.11.0",
+    "redis": "^4.6.11",
+    "pg": "^8.11.3",
+    "multer": "^1.4.5-lts.1",
+    "fluent-ffmpeg": "^2.1.2",
+    "@google-cloud/speech": "^6.2.0",
+    "form-data": "^4.0.0",
+    "body-parser": "^1.20.2",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
+    "node-cache": "^5.1.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "eslint": "^8.55.0",
+    "jest": "^29.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
+
