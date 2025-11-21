@@ -1,6 +1,13 @@
 const RedisClient = require('./redis');
 const logger = require('../utils/logger');
 
+// Allow disabling all caching via environment variable
+const CACHE_DISABLED = process.env.DISABLE_CACHE === 'true';
+
+if (CACHE_DISABLED) {
+  logger.warn('[CACHE] Caching is disabled via DISABLE_CACHE=true');
+}
+
 class CacheService {
   /**
    * Get value from cache
@@ -9,7 +16,7 @@ class CacheService {
    */
   async get(key) {
     try {
-      if (!RedisClient.isConnected) {
+      if (CACHE_DISABLED || !RedisClient.isConnected) {
         return null;
       }
       const client = RedisClient.getClient();
@@ -29,7 +36,7 @@ class CacheService {
    */
   async set(key, value, ttl = 3600) {
     try {
-      if (!RedisClient.isConnected) {
+      if (CACHE_DISABLED || !RedisClient.isConnected) {
         return false;
       }
       const client = RedisClient.getClient();
@@ -48,6 +55,7 @@ class CacheService {
    */
   async del(key) {
     try {
+      if (CACHE_DISABLED) return false;
       const client = RedisClient.getClient();
       await client.del(key);
       return true;
@@ -64,6 +72,7 @@ class CacheService {
    */
   async exists(key) {
     try {
+      if (CACHE_DISABLED) return false;
       const client = RedisClient.getClient();
       const result = await client.exists(key);
       return result === 1;

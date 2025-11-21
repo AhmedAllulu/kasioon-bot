@@ -371,12 +371,11 @@ class MarketplaceSearchService {
   normalizeParams(params) {
     console.log('🔄 [NORMALIZE] Starting parameter normalization...');
     console.log('📥 [NORMALIZE] Input:', JSON.stringify(params, null, 2));
-    
+
     const normalized = {};
 
-    // Category filtering - use slug if available, otherwise try to map
+    // Category filtering - use slug if available, otherwise map
     if (params.category) {
-      // Map common category names to slugs
       const categoryMap = {
         'vehicles': 'vehicles',
         'real-estate': 'real-estate',
@@ -389,208 +388,168 @@ class MarketplaceSearchService {
         'houses': 'houses',
         'villas': 'villas'
       };
-      
       normalized.categorySlug = categoryMap[params.category.toLowerCase()] || params.category;
     }
 
-    // Location filtering - SMART STRATEGY with province-first approach
+    // ============================================================================
+    // FIXED LOCATION FILTERING
+    // ============================================================================
     if (params.city) {
-      // Complete Syrian province mapping (all 14 governorates)
-      // Map to Arabic province names for better API compatibility
+      // Province mapping (Arabic & English → English)
       const provinceMap = {
-        // English names → Arabic values
-        'Aleppo': 'حلب',
-        'Damascus': 'دمشق',
-        'Rif Dimashq': 'ريف دمشق',
-        'Homs': 'حمص',
-        'Hama': 'حماة',
-        'Latakia': 'اللاذقية',
-        'Idlib': 'إدلب',
-        'Tartus': 'طرطوس',
-        'Daraa': 'درعا',
-        'As-Suwayda': 'السويداء',
-        'Deir ez-Zor': 'دير الزور',
-        'Al-Hasakah': 'الحسكة',
-        'Ar-Raqqah': 'الرقة',
-        'Quneitra': 'القنيطرة',
-        // Arabic names → Arabic values (passthrough)
-        'حلب': 'حلب',
-        'دمشق': 'دمشق',
-        'ريف دمشق': 'ريف دمشق',
-        'حمص': 'حمص',
-        'حماة': 'حماة',
-        'اللاذقية': 'اللاذقية',
-        'إدلب': 'إدلب',
-        'طرطوس': 'طرطوس',
-        'درعا': 'درعا',
-        'السويداء': 'السويداء',
-        'دير الزور': 'دير الزور',
-        'الحسكة': 'الحسكة',
-        'الرقة': 'الرقة',
-        'القنيطرة': 'القنيطرة'
+        'Aleppo': 'Aleppo',
+        'Damascus': 'Damascus',
+        'Rif Dimashq': 'Rif Dimashq',
+        'Homs': 'Homs',
+        'Hama': 'Hama',
+        'Latakia': 'Latakia',
+        'Idlib': 'Idlib',
+        'Tartus': 'Tartus',
+        'Daraa': 'Daraa',
+        'As-Suwayda': 'As-Suwayda',
+        'Deir ez-Zor': 'Deir ez-Zor',
+        'Hasakah': 'Hasakah',
+        'Al-Hasakah': 'Hasakah',
+        'Raqqa': 'Raqqa',
+        'Ar-Raqqah': 'Raqqa',
+        'Quneitra': 'Quneitra',
+
+        // Arabic names
+        'حلب': 'Aleppo',
+        'دمشق': 'Damascus',
+        'ريف دمشق': 'Rif Dimashq',
+        'حمص': 'Homs',
+        'حماة': 'Hama',
+        'حماه': 'Hama',
+        'اللاذقية': 'Latakia',
+        'إدلب': 'Idlib',
+        'ادلب': 'Idlib',
+        'طرطوس': 'Tartus',
+        'درعا': 'Daraa',
+        'السويداء': 'As-Suwayda',
+        'دير الزور': 'Deir ez-Zor',
+        'ديرالزور': 'Deir ez-Zor',
+        'الحسكة': 'Hasakah',
+        'الرقة': 'Raqqa',
+        'القنيطرة': 'Quneitra',
+
+        // Common aliases
+        'الشام': 'Damascus',
+        'dimashq': 'Damascus',
+        'halab': 'Aleppo',
+        'haleb': 'Aleppo',
+        'hims': 'Homs',
+        'lattakia': 'Latakia',
+        'ladhiqiyah': 'Latakia',
+        'hamah': 'Hama',
+        'tartous': 'Tartus',
+        'deir ezzor': 'Deir ez-Zor',
+
+        // Lowercase English
+        'aleppo': 'Aleppo',
+        'damascus': 'Damascus',
+        'rif dimashq': 'Rif Dimashq',
+        'homs': 'Homs',
+        'hama': 'Hama',
+        'latakia': 'Latakia',
+        'idlib': 'Idlib',
+        'tartus': 'Tartus',
+        'daraa': 'Daraa',
+        'as-suwayda': 'As-Suwayda',
+        'deir ez-zor': 'Deir ez-Zor',
+        'hasakah': 'Hasakah',
+        'raqqa': 'Raqqa',
+        'quneitra': 'Quneitra'
       };
 
-      // SMART LOGIC: Check if location is a province
-      const isProvince = provinceMap.hasOwnProperty(params.city);
+      const cityInput = params.city.trim();
+      const cityLower = cityInput.toLowerCase();
+      let matchedProvince = null;
 
-      if (isProvince) {
-        // Province-first strategy: Send ONLY province for broader search
-        normalized.province = provinceMap[params.city];
-        console.log(`🌍 [NORMALIZE] Province detected: ${params.city} → ${normalized.province} (province-only search)`);
-        // DO NOT set cityName for province-level searches
-      } else {
-        // Not a province - treat as specific city
-        normalized.cityName = params.city;
-        console.log(`🏙️  [NORMALIZE] City search: ${params.city}`);
-
-        // Check if multi-word location (e.g., "مساكن برزة")
-        if (params.city.includes(' ')) {
-          const words = params.city.split(' ').filter(w => w.trim().length > 0);
-          console.log(`🔤 [NORMALIZE] Multi-word location detected: "${params.city}" → words: ${words.join(', ')}`);
-
-          // Add each word to keywords for better matching
-          const locationKeywords = words.join(' ');
-          if (params.keywords) {
-            normalized.keywords = `${params.keywords} ${locationKeywords}`;
-          } else {
-            normalized.keywords = locationKeywords;
+      if (provinceMap[cityInput]) matchedProvince = provinceMap[cityInput];
+      else if (provinceMap[cityLower]) matchedProvince = provinceMap[cityLower];
+      else {
+        for (const [key, eng] of Object.entries(provinceMap)) {
+          if (key.toLowerCase() === cityLower || cityInput.includes(key) || key.includes(cityInput)) {
+            matchedProvince = eng;
+            break;
           }
+        }
+      }
+
+      if (matchedProvince) {
+        normalized.province = matchedProvince;
+        console.log(`🌍 [NORMALIZE] Province detected: "${cityInput}" → English: "${matchedProvince}" (province-level search)`);
+      } else {
+        normalized.cityName = cityInput;
+        console.log(`🏙️  [NORMALIZE] City search: "${cityInput}"`);
+
+        if (cityInput.includes(' ')) {
+          const words = cityInput.split(' ').filter(w => w.trim().length);
+          console.log(`🔤 [NORMALIZE] Multi-word location detected: "${cityInput}" → ${words.join(', ')}`);
+          const locKeywords = words.join(' ');
+          normalized.keywords = params.keywords ? `${params.keywords} ${locKeywords}` : locKeywords;
           console.log(`🔍 [NORMALIZE] Added location words to keywords: "${normalized.keywords}"`);
         }
       }
     }
+    // ============================================================================
+    // END LOCATION FIX
+    // ============================================================================
 
-    // Transaction type (sale, rent, etc.)
-    if (params.transactionType) {
-      normalized.transactionTypeSlug = params.transactionType.toLowerCase();
-    }
+    // Transaction type
+    if (params.transactionType) normalized.transactionTypeSlug = params.transactionType.toLowerCase();
 
-    // Price filtering - use new format (recommended)
+    // Price filtering
     if (params.minPrice || params.maxPrice) {
       normalized['price.min'] = params.minPrice ? parseFloat(params.minPrice) : undefined;
       normalized['price.max'] = params.maxPrice ? parseFloat(params.maxPrice) : undefined;
     }
 
-    // Area filtering
+    // Area
     if (params.minArea || params.maxArea) {
       normalized['area.min'] = params.minArea ? parseFloat(params.minArea) : undefined;
       normalized['area.max'] = params.maxArea ? parseFloat(params.maxArea) : undefined;
     }
 
-    // Keywords/search query - merge with location keywords if set
+    // Keywords
     if (params.keywords || params.query) {
-      const searchKeywords = params.keywords || params.query;
-      // If location keywords were already added, merge them
-      if (normalized.keywords) {
-        // Location keywords already set, merge with search keywords
-        normalized.keywords = `${searchKeywords} ${normalized.keywords}`.substring(0, 200);
-      } else {
-        // No location keywords, just use search keywords
-        normalized.keywords = searchKeywords.substring(0, 200);
-      }
+      const searchKw = params.keywords || params.query;
+      normalized.keywords = normalized.keywords ? `${searchKw} ${normalized.keywords}`.substring(0, 200) : searchKw.substring(0, 200);
     }
 
-    // Dynamic attributes for vehicles (if category is vehicles)
-    if (params.category && (params.category.toLowerCase() === 'vehicles' || params.category.toLowerCase() === 'cars')) {
-      const attributes = {};
-      
-      if (params.carBrand) {
-        attributes.brand = params.carBrand;
-      }
-      if (params.carModel) {
-        attributes.model = params.carModel;
-      }
+    // Vehicle attributes
+    if (params.category && ['vehicles', 'cars'].includes(params.category.toLowerCase())) {
+      const attr = {};
+      if (params.carBrand) attr.brand = params.carBrand;
+      if (params.carModel) attr.model = params.carModel;
       if (params.minYear || params.maxYear) {
-        attributes.year = {};
-        if (params.minYear) attributes.year.min = parseInt(params.minYear);
-        if (params.maxYear) attributes.year.max = parseInt(params.maxYear);
+        attr.year = {};
+        if (params.minYear) attr.year.min = parseInt(params.minYear);
+        if (params.maxYear) attr.year.max = parseInt(params.maxYear);
       }
-      if (params.fuelType) {
-        attributes.fuelType = params.fuelType;
-      }
-      if (params.transmission) {
-        attributes.transmission = params.transmission;
-      }
-      
-      if (Object.keys(attributes).length > 0) {
-        // Store as JSON string for query parameter
-        normalized.attributes = JSON.stringify(attributes);
-      }
-    }
-
-    // Dynamic attributes for real estate
-    if (params.category && (params.category.toLowerCase().includes('real-estate') || 
-        params.category.toLowerCase() === 'apartments' ||
-        params.category.toLowerCase() === 'houses' ||
-        params.category.toLowerCase() === 'villas')) {
-      const attributes = {};
-      
-      if (params.rooms) {
-        attributes.rooms = parseInt(params.rooms);
-      }
-      if (params.bathrooms) {
-        attributes.bathrooms = parseInt(params.bathrooms);
-      }
-      if (params.floor) {
-        attributes.floor = parseInt(params.floor);
-      }
-      if (params.furnished !== undefined) {
-        attributes.furnished = params.furnished;
-      }
-      
-      if (Object.keys(attributes).length > 0) {
-        // Store as JSON string for query parameter
-        normalized.attributes = JSON.stringify(attributes);
-      }
-    }
-
-    // Dynamic category-specific filters (from filter enrichment)
-    if (params.filterParams && typeof params.filterParams === 'object') {
-      console.log('🔧 [NORMALIZE] Adding category-specific filters:', JSON.stringify(params.filterParams, null, 2));
-
-      // Add each filter parameter directly to the normalized params
-      // These are already in the correct format: filters[filterName]=value
-      Object.keys(params.filterParams).forEach(key => {
-        const value = params.filterParams[key];
-        if (value !== undefined && value !== null && value !== '') {
-          normalized[key] = value;
-          console.log(`   ✅ Added filter: ${key} = ${value}`);
-        }
-      });
-    }
-
-    // Sorting
-    if (params.sortBy) {
-      normalized.sortBy = params.sortBy; // price, area, date, priority, relevance, popularity
-    } else {
-      normalized.sortBy = 'relevance'; // Default to relevance for search
-    }
-    
-    if (params.sortOrder) {
-      normalized.sortOrder = params.sortOrder.toUpperCase(); // ASC or DESC
-    }
-
-    // Filters
-    if (params.featured !== undefined) {
-      normalized.featured = params.featured;
-    }
-    if (params.hasImages !== undefined) {
-      normalized.hasImages = params.hasImages;
-    }
-    if (params.hasVideo !== undefined) {
-      normalized.hasVideo = params.hasVideo;
+      if (params.fuelType) attr.fuelType = params.fuelType;
+      if (params.transmission) attr.transmission = params.transmission;
+      if (Object.keys(attr).length) normalized.attributes = JSON.stringify(attr);
     }
 
     // Pagination
     normalized.page = params.page || 1;
-    normalized.limit = Math.min(params.limit || 20, 100); // Max 100 per API docs
+    normalized.limit = params.limit || 20;
 
-    // Remove undefined values
-    Object.keys(normalized).forEach(key => {
-      if (normalized[key] === undefined || normalized[key] === null || normalized[key] === '') {
-        delete normalized[key];
-      }
-    });
+    // Sorting
+    if (params.sortBy) {
+      normalized.sortBy = params.sortBy;
+      normalized.sortOrder = params.sortOrder || 'DESC';
+    }
+
+    // Additional filters
+    if (params.featured) normalized.featured = true;
+    if (params.hasImages) normalized.hasImages = true;
+    if (params.hasVideo) normalized.hasVideo = true;
+    if (params.condition && !normalized.attributes) {
+      normalized.attributes = JSON.stringify({ condition: params.condition });
+    }
 
     console.log('✅ [NORMALIZE] Normalization complete!');
     console.log('📤 [NORMALIZE] Output:', JSON.stringify(normalized, null, 2));
