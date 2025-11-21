@@ -7,6 +7,7 @@ const cache = require('../cache');
 const ArabicNormalizer = require('../../utils/arabicNormalizer');
 const FilterMatcher = require('./filterMatcher');
 const MatchScorer = require('./matchScorer');
+const ResultValidator = require('../search/resultValidator');
 
 /**
  * Detect language from text message
@@ -879,6 +880,25 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
         if (topResults[0]?.matchDetails) {
           console.log(`🏆 [AI-FILTER] Top result breakdown:`, topResults[0].matchDetails);
         }
+
+        // Validate results quality
+        const language = userParams.language || 'ar';
+        const validation = ResultValidator.validate(topResults, userParams, userMessage, language);
+        console.log(`🔍 [VALIDATOR] Quality score: ${validation.qualityScore}%`);
+
+        if (validation.warnings.length > 0) {
+          console.log(`⚠️  [VALIDATOR] Warnings:`, validation.warnings);
+        }
+
+        // Attach validation info to results for use in response formatting
+        return topResults.map(result => ({
+          ...result,
+          _validation: {
+            qualityScore: validation.qualityScore,
+            warnings: validation.warnings,
+            suggestions: validation.suggestions
+          }
+        }));
       }
 
       return topResults;

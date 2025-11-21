@@ -9,6 +9,65 @@ const MatchScorer = require('./matchScorer');
 class ResponseFormatter {
   constructor() {
     this.websiteUrl = process.env.KASIOON_WEBSITE_URL || 'https://kasioon.com';
+
+    // Greeting variations for more natural conversations
+    this.greetingVariations = {
+      ar: [
+        'أهلاً وسهلاً {name}! 👋',
+        'مرحباً {name}! كيف أقدر أساعدك؟ 😊',
+        'هلا {name}! شو بتدور عليه اليوم؟',
+        'يا هلا {name}! تحت أمرك 🙌',
+        'مرحبتين {name}! جاهز لمساعدتك 💪'
+      ],
+      en: [
+        'Hi {name}! How can I help? 👋',
+        'Hello {name}! What are you looking for? 😊',
+        'Hey {name}! Ready to help you find something great!',
+        'Welcome {name}! How can I assist you today? 🙌',
+        'Hi there {name}! Let\'s find what you need! 💪'
+      ]
+    };
+
+    // No results variations
+    this.noResultsVariations = {
+      ar: [
+        '😔 *ما لقيت شي يطابق بحثك*',
+        '🔍 *للأسف، ما في نتائج حالياً*',
+        '😕 *البحث ما جاب نتائج*',
+        '🤷 *ما في إعلانات تطابق طلبك*'
+      ],
+      en: [
+        '😔 *No matching results found*',
+        '🔍 *Unfortunately, no results at the moment*',
+        '😕 *Search didn\'t return any results*',
+        '🤷 *No listings match your request*'
+      ]
+    };
+
+    // Success variations for search results header
+    this.successVariations = {
+      ar: [
+        '✨ *وجدت {count} نتيجة*',
+        '🎯 *لقيت {count} إعلان*',
+        '👍 *في {count} نتيجة متوفرة*',
+        '🔥 *{count} إعلان مطابق لبحثك*'
+      ],
+      en: [
+        '✨ *Found {count} results*',
+        '🎯 *Got {count} listings*',
+        '👍 *{count} results available*',
+        '🔥 *{count} listings match your search*'
+      ]
+    };
+  }
+
+  /**
+   * Get random variation from array
+   * @param {Array} variations - Array of variations
+   * @returns {string} Random variation
+   */
+  getRandomVariation(variations) {
+    return variations[Math.floor(Math.random() * variations.length)];
   }
 
   /**
@@ -26,10 +85,14 @@ class ResponseFormatter {
     const isArabic = language === 'ar';
     let message = '';
 
-    // Header
-    message += isArabic
-      ? `✨ *وجدت ${results.length} نتيجة*\n\n`
-      : `✨ *Found ${results.length} results*\n\n`;
+    // Header with variation
+    const headerTemplate = this.getRandomVariation(this.successVariations[isArabic ? 'ar' : 'en']);
+    message += headerTemplate.replace('{count}', results.length) + '\n\n';
+
+    // Check for validation warnings (from ResultValidator)
+    if (results[0]?._validation?.warnings?.length > 0) {
+      message += results[0]._validation.warnings.join('\n') + '\n\n';
+    }
 
     // Format each result (max 10 to avoid too long messages)
     results.slice(0, 10).forEach((item, index) => {
@@ -306,8 +369,11 @@ class ResponseFormatter {
   getNoResultsMessage(language) {
     const isArabic = language === 'ar';
 
+    // Get random no results header
+    const header = this.getRandomVariation(this.noResultsVariations[isArabic ? 'ar' : 'en']);
+
     if (isArabic) {
-      return `😔 *لم أجد نتائج مطابقة لبحثك*
+      return `${header}
 
 💡 *نصائح للحصول على نتائج أفضل:*
 • جرب توسيع نطاق البحث
@@ -323,7 +389,7 @@ class ResponseFormatter {
 🌐 ${this.websiteUrl}`;
     }
 
-    return `😔 *No matching results found*
+    return `${header}
 
 💡 *Tips for better results:*
 • Try broadening your search
@@ -452,11 +518,14 @@ class ResponseFormatter {
    */
   formatGreeting(firstName, language = 'ar') {
     const isArabic = language === 'ar';
+    const escapedName = this.escapeMarkdown(firstName);
+
+    // Get random greeting variation
+    const greetingTemplate = this.getRandomVariation(this.greetingVariations[isArabic ? 'ar' : 'en']);
+    const greeting = greetingTemplate.replace('{name}', `*${escapedName}*`);
 
     if (isArabic) {
-      return `مرحباً *${this.escapeMarkdown(firstName)}*! 👋
-
-كيف أقدر أساعدك اليوم؟
+      return `${greeting}
 
 💡 *جرب إرسال:*
 • "أريد سيارة في دمشق"
@@ -467,9 +536,7 @@ class ResponseFormatter {
 🎤 أو أرسل رسالة صوتية!`;
     }
 
-    return `Hello *${this.escapeMarkdown(firstName)}*! 👋
-
-How can I help you today?
+    return `${greeting}
 
 💡 *Try sending:*
 • "I want a car in Damascus"

@@ -6,6 +6,9 @@ const marketplaceSearch = require('../search/marketplaceSearch');
 const audioProcessor = require('../audio/processor');
 const responseFormatter = require('../ai/responseFormatter');
 const searchHistory = require('../db/searchHistory');
+const intentClassifier = require('../ai/intentClassifier');
+const contextManager = require('../conversation/contextManager');
+const historyTracker = require('../conversation/historyTracker');
 
 class TelegramBot {
   constructor() {
@@ -205,17 +208,89 @@ Send a voice message and I'll understand
       // Send typing indicator
       await ctx.sendChatAction('typing');
 
-      // Detect language
-      const language = this.detectLanguage(userMessage);
+      // Get user context (contains conversation history and preferences)
+      const userContext = contextManager.getContext(userId);
+
+      // Detect language (prefer context language if available)
+      const language = userContext.preferredLanguage || this.detectLanguage(userMessage);
 
       logger.info(`[TELEGRAM] Processing message from user ${userId}:`, userMessage);
 
-      // Check for greetings or simple responses
-      if (this.isGreeting(userMessage)) {
-        const greeting = responseFormatter.formatGreeting(ctx.from.first_name, language);
-        await ctx.reply(greeting, { parse_mode: 'Markdown' });
+      // Check for repeated messages
+      if (historyTracker.isRepeatedMessage(userId, userMessage)) {
+        logger.warn(`[TELEGRAM] User ${userId} sent repeated message`);
+        const repeatedMsg = language === 'ar'
+          ? '🔄 لقد أرسلت نفس الرسالة للتو. هل تريد تجربة بحث مختلف؟'
+          : '🔄 You just sent the same message. Want to try a different search?';
+        await ctx.reply(repeatedMsg);
         return;
       }
+
+      // Classify user intent using the new Intent Classifier with context
+      const intentResult = intentClassifier.classify(userMessage, {
+        lastIntent: userContext.lastIntent,
+        lastSearchParams: userContext.lastSearchParams
+      });
+
+      logger.info(`[INTENT] Classified as: ${intentResult.intent} (confidence: ${intentResult.confidence})`);
+
+      // Update context with current message
+      contextManager.updateContext(userId, {
+        lastMessage: userMessage,
+        lastIntent: intentResult.intent,
+        lastIntentConfidence: intentResult.confidence,
+        preferredLanguage: language
+      });
+
+      // Handle different intents
+      switch (intentResult.intent) {
+        case intentClassifier.intentTypes.GREETING:
+          const greeting = responseFormatter.formatGreeting(ctx.from.first_name, language);
+          await ctx.reply(greeting, { parse_mode: 'Markdown' });
+          return;
+
+        case intentClassifier.intentTypes.HELP:
+          const helpMessage = language === 'ar'
+            ? `🤖 *كيف يمكنني مساعدتك؟*\n\nأنا بوت ذكي للبحث في السوق السوري. يمكنني مساعدتك في:\n\n• 🔍 البحث عن منتجات (سيارات، عقارات، إلكترونيات، إلخ)\n• 📍 تحديد الموقع والمدينة\n• 💰 تحديد نطاق السعر\n• 🎯 تطبيق فلاتر البحث المتقدمة\n\n*أمثلة على طلبات البحث:*\n• "سيارة للبيع في دمشق"\n• "شقة للإيجار في حلب بسعر أقل من 500 ألف"\n• "موبايل سامسونج مستعمل"\n\nجرب الآن! 👇`
+            : `🤖 *How can I help you?*\n\nI'm an intelligent bot for searching the Syrian marketplace. I can help you with:\n\n• 🔍 Searching for products (cars, real estate, electronics, etc.)\n• 📍 Specifying location and city\n• 💰 Setting price ranges\n• 🎯 Applying advanced search filters\n\n*Example search queries:*\n• "car for sale in Damascus"\n• "apartment for rent in Aleppo under 500k"\n• "used Samsung phone"\n\nTry it now! 👇`;
+          await ctx.reply(helpMessage, { parse_mode: 'Markdown' });
+          return;
+
+        case intentClassifier.intentTypes.GOODBYE:
+          const goodbyeMessage = language === 'ar'
+            ? 'مع السلامة! سعدت بمساعدتك 👋\nإذا احتجت شي ثاني، أنا هنا! 😊'
+            : 'Goodbye! Happy to help you 👋\nIf you need anything else, I\'m here! 😊';
+          await ctx.reply(goodbyeMessage);
+          return;
+
+        case intentClassifier.intentTypes.FEEDBACK:
+          const sentiment = intentResult.sentiment || 'neutral';
+          const feedbackResponse = sentiment === 'positive'
+            ? (language === 'ar' ? '😊 شكراً على ملاحظاتك الإيجابية! سعيد أنني ساعدتك' : '😊 Thanks for the positive feedback! Happy I could help')
+            : sentiment === 'negative'
+            ? (language === 'ar' ? '😔 عذراً إذا لم تكن النتائج كما توقعت. جرب تعديل معايير البحث' : '😔 Sorry the results weren\'t what you expected. Try adjusting your search criteria')
+            : (language === 'ar' ? 'شكراً على ملاحظاتك!' : 'Thanks for your feedback!');
+          await ctx.reply(feedbackResponse);
+          return;
+
+        case intentClassifier.intentTypes.UNCLEAR:
+          // Send clarification question
+          const clarificationMsg = intentResult.clarificationQuestion ||
+            responseFormatter.getNoResultsMessage(language);
+          await ctx.reply(clarificationMsg, { parse_mode: 'Markdown' });
+          return;
+
+        case intentClassifier.intentTypes.SEARCH:
+          // Continue with search flow (existing code)
+          break;
+
+        default:
+          // Unknown intent, try to search anyway
+          logger.warn(`[INTENT] Unknown intent type: ${intentResult.intent}`);
+          break;
+      }
+
+      // SEARCH FLOW (only reached if intent is SEARCH or unknown)
 
       // Check DB cache for popular searches first
       const cachedResults = await searchHistory.getCachedResults(userMessage);
@@ -230,7 +305,9 @@ Send a voice message and I'll understand
           queryText: userMessage,
           resultsCount: cachedResults.length,
           responseTimeMs: Date.now() - startTime,
-          language
+          language,
+          intent: intentResult.intent,
+          intentConfidence: intentResult.confidence
         });
         return;
       }
@@ -273,6 +350,9 @@ Send a voice message and I'll understand
       await ctx.deleteMessage(searchingMsg.message_id).catch(() => {});
       await this.sendFormattedMessage(ctx, formattedMessage);
 
+      // Save search results to context manager
+      contextManager.saveSearchResults(userId, extractedParams, filteredResults);
+
       // Log search to database
       const responseTime = Date.now() - startTime;
       await searchHistory.logSearch({
@@ -284,7 +364,9 @@ Send a voice message and I'll understand
         responseTimeMs: responseTime,
         category: extractedParams.category,
         city: extractedParams.city,
-        language
+        language,
+        intent: intentResult.intent,
+        intentConfidence: intentResult.confidence
       });
 
       logger.info(`[TELEGRAM] Response sent in ${responseTime}ms`);
