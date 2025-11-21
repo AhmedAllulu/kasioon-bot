@@ -93,8 +93,7 @@ class AIAgent {
         console.log('✅ [AI-ANALYZE] Categories fetched:', categories.length, 'categories');
         console.log('📋 [AI-ANALYZE] Available categories:', categories.map(c => ({
           slug: c.slug,
-          nameEn: c.nameEn,
-          nameAr: c.nameAr
+          name: c.name
         })));
       } catch (categoryError) {
         console.warn('⚠️  [AI-ANALYZE] Failed to fetch categories, continuing without category validation:', categoryError.message);
@@ -134,6 +133,21 @@ Extract the following parameters if mentioned:
 - maxPrice: Maximum price
 - condition: Item condition (new, used)
 
+IMPORTANT CATEGORIZATION RULES FOR REAL ESTATE:
+- ANY type of land (أرض) MUST be categorized as "real-estate", including:
+  * Agricultural land (أرض زراعية)
+  * Commercial land (أرض تجارية)
+  * Residential land (أرض سكنية)
+  * Empty land (أرض فضاء)
+- ALL property and housing MUST be categorized as "real-estate":
+  * Apartments (شقة/شقق)
+  * Houses (منزل/بيت/دار)
+  * Villas (فيلا)
+  * Offices (مكتب)
+  * Shops (محل/دكان)
+  * Buildings (عمارة/بناء)
+  * Warehouses (مستودع)
+
 For vehicles specifically, also extract:
 - carBrand: Car brand/make (e.g., Toyota, BMW, Mercedes)
 - carModel: Specific car model (e.g., Corolla, Camry, 320i)
@@ -150,6 +164,15 @@ Response: {"city": "Aleppo", "category": "vehicles", "carBrand": "Toyota", "keyw
 
 User: "شقة للبيع في دمشق"
 Response: {"city": "Damascus", "category": "real-estate", "keywords": "شقة للبيع"}
+
+User: "بدي ارض زراعية في إدلب"
+Response: {"city": "Idlib", "category": "real-estate", "keywords": "أرض زراعية"}
+
+User: "أرض تجارية للبيع في حلب"
+Response: {"city": "Aleppo", "category": "real-estate", "keywords": "أرض تجارية للبيع"}
+
+User: "منزل في اللاذقية"
+Response: {"city": "Latakia", "category": "real-estate", "keywords": "منزل"}
 
 User: "لابتوب مستعمل"
 Response: {"category": "electronics", "keywords": "لابتوب", "condition": "used"}`;
@@ -299,11 +322,11 @@ Response: {"category": "electronics", "keywords": "لابتوب", "condition": "
         const validCategory = categories.find(cat => 
           cat.slug.toLowerCase() === categorySlug ||
           cat.name?.toLowerCase() === categorySlug ||
+          cat.name === extractedParams.category ||
+          // Fallback to nameEn/nameAr if name is not available (for backward compatibility)
           cat.nameEn?.toLowerCase() === categorySlug ||
           cat.nameAr?.toLowerCase() === categorySlug ||
-          cat.name === extractedParams.category ||
-          cat.nameAr === extractedParams.category ||
-          cat.nameEn?.toLowerCase() === categorySlug
+          cat.nameAr === extractedParams.category
         );
         
         if (validCategory) {
@@ -342,7 +365,7 @@ Response: {"category": "electronics", "keywords": "لابتوب", "condition": "
       if (modelManager.shouldCache(taskType)) {
         const cacheKey = `ai:params:${this.hashString(message)}`;
         const cacheTTL = modelManager.getCacheTTL(taskType);
-        await cache.setex(cacheKey, cacheTTL, JSON.stringify(extractedParams));
+        await cache.set(cacheKey, JSON.stringify(extractedParams), cacheTTL);
       }
 
       return extractedParams;
@@ -670,6 +693,73 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
       }
 
       throw new Error(`Failed to transcribe audio: ${error.message}`);
+    }
+  }
+
+  /**
+   * Analyze search results and return most relevant ones
+   * @param {Array} results - Search results from API
+   * @param {string} userMessage - Original user query
+   * @param {number} maxResults - Maximum number of results to return (default: 10)
+   * @returns {Promise<Array>} Filtered and ranked results
+   */
+  async filterRelevantResults(results, userMessage, maxResults = 10) {
+    try {
+      // If results are already within limit, return all
+      if (!results || results.length === 0) {
+        console.log('ℹ️  [AI-FILTER] No results to filter');
+        return results;
+      }
+
+      if (results.length <= maxResults) {
+        console.log(`✅ [AI-FILTER] Results (${results.length}) within limit (${maxResults}), returning all`);
+        return results;
+      }
+
+      console.log(`🔍 [AI-FILTER] Filtering ${results.length} results to top ${maxResults} most relevant...`);
+
+      // Simple relevance scoring based on keyword matching
+      // This is a lightweight approach that doesn't require an API call
+      const keywords = userMessage.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+      console.log(`🔑 [AI-FILTER] Keywords from query: ${keywords.join(', ')}`);
+
+      const scoredResults = results.map(result => {
+        let score = 0;
+        const title = (result.title || '').toLowerCase();
+        const description = (result.description || '').toLowerCase();
+        const category = (result.category?.name || '').toLowerCase();
+
+        // Score based on keyword matches in title (highest weight)
+        keywords.forEach(keyword => {
+          if (title.includes(keyword)) score += 3;
+          if (description.includes(keyword)) score += 1;
+          if (category.includes(keyword)) score += 2;
+        });
+
+        // Prefer listings with prices (likely more complete)
+        if (result.attributes?.price || result.price) score += 1;
+
+        // Prefer listings with images
+        if (result.images && result.images.length > 0) score += 1;
+
+        return { ...result, relevanceScore: score };
+      });
+
+      // Sort by relevance score (descending)
+      scoredResults.sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+      // Return top N results
+      const topResults = scoredResults.slice(0, maxResults);
+      console.log(`✅ [AI-FILTER] Filtered to top ${topResults.length} results`);
+      console.log(`📊 [AI-FILTER] Score range: ${topResults[0]?.relevanceScore} (best) to ${topResults[topResults.length-1]?.relevanceScore} (worst)`);
+
+      return topResults;
+
+    } catch (error) {
+      console.error('❌ [AI-FILTER] Error filtering results:', error.message);
+      logger.error('Error filtering results:', error);
+      // Fallback: return first N results
+      return results.slice(0, maxResults);
     }
   }
 

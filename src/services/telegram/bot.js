@@ -247,14 +247,17 @@ Send a voice message and I'll understand
       // Search marketplace
       const results = await marketplaceSearch.search(extractedParams);
 
+      // AI-powered result filtering: return only most relevant results
+      const filteredResults = await aiAgent.filterRelevantResults(results, userMessage, 10);
+
       // Format response
       let formattedMessage;
-      if (results.length > 0) {
-        formattedMessage = responseFormatter.formatSearchResults(results, language);
+      if (filteredResults.length > 0) {
+        formattedMessage = responseFormatter.formatSearchResults(filteredResults, language);
 
         // Cache results if enough results
-        if (results.length >= 3) {
-          await searchHistory.cacheResults(userMessage, results);
+        if (filteredResults.length >= 3) {
+          await searchHistory.cacheResults(userMessage, filteredResults);
         }
       } else {
         formattedMessage = responseFormatter.getNoResultsMessage(language);
@@ -264,14 +267,15 @@ Send a voice message and I'll understand
       await ctx.deleteMessage(searchingMsg.message_id).catch(() => {});
       await this.sendFormattedMessage(ctx, formattedMessage);
 
-      // Log search to database
+      // Log search to database (log both total and filtered count)
       const responseTime = Date.now() - startTime;
       await searchHistory.logSearch({
         userId,
         platform: 'telegram',
         queryText: userMessage,
         extractedParams,
-        resultsCount: results.length,
+        resultsCount: filteredResults.length,  // Log filtered count
+        totalResultsCount: results.length,      // Also track total before filtering
         responseTimeMs: responseTime,
         category: extractedParams.category,
         city: extractedParams.city,

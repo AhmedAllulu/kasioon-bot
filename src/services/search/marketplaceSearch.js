@@ -356,24 +356,69 @@ class MarketplaceSearchService {
       normalized.categorySlug = categoryMap[params.category.toLowerCase()] || params.category;
     }
 
-    // Location filtering - support both Arabic and English city names
+    // Location filtering - SMART STRATEGY with province-first approach
     if (params.city) {
-      // The API accepts city names in any language
-      normalized.cityName = params.city;
-      // Also try province if city is a major city
+      // Complete Syrian province mapping (all 14 governorates)
       const provinceMap = {
+        // English names
         'Aleppo': 'Aleppo',
         'Damascus': 'Damascus',
+        'Rif Dimashq': 'Rif Dimashq',
         'Homs': 'Homs',
+        'Hama': 'Hama',
         'Latakia': 'Latakia',
+        'Idlib': 'Idlib',
+        'Tartus': 'Tartus',
+        'Daraa': 'Daraa',
+        'As-Suwayda': 'As-Suwayda',
+        'Deir ez-Zor': 'Deir ez-Zor',
+        'Al-Hasakah': 'Al-Hasakah',
+        'Ar-Raqqah': 'Ar-Raqqah',
+        'Quneitra': 'Quneitra',
+        // Arabic names
         'حلب': 'Aleppo',
         'دمشق': 'Damascus',
+        'ريف دمشق': 'Rif Dimashq',
         'حمص': 'Homs',
-        'اللاذقية': 'Latakia'
+        'حماة': 'Hama',
+        'اللاذقية': 'Latakia',
+        'إدلب': 'Idlib',
+        'طرطوس': 'Tartus',
+        'درعا': 'Daraa',
+        'السويداء': 'As-Suwayda',
+        'دير الزور': 'Deir ez-Zor',
+        'الحسكة': 'Al-Hasakah',
+        'الرقة': 'Ar-Raqqah',
+        'القنيطرة': 'Quneitra'
       };
-      
-      if (provinceMap[params.city]) {
+
+      // SMART LOGIC: Check if location is a province
+      const isProvince = provinceMap.hasOwnProperty(params.city);
+
+      if (isProvince) {
+        // Province-first strategy: Send ONLY province for broader search
         normalized.province = provinceMap[params.city];
+        console.log(`🌍 [NORMALIZE] Province detected: ${params.city} → ${normalized.province} (province-only search)`);
+        // DO NOT set cityName for province-level searches
+      } else {
+        // Not a province - treat as specific city
+        normalized.cityName = params.city;
+        console.log(`🏙️  [NORMALIZE] City search: ${params.city}`);
+
+        // Check if multi-word location (e.g., "مساكن برزة")
+        if (params.city.includes(' ')) {
+          const words = params.city.split(' ').filter(w => w.trim().length > 0);
+          console.log(`🔤 [NORMALIZE] Multi-word location detected: "${params.city}" → words: ${words.join(', ')}`);
+
+          // Add each word to keywords for better matching
+          const locationKeywords = words.join(' ');
+          if (params.keywords) {
+            normalized.keywords = `${params.keywords} ${locationKeywords}`;
+          } else {
+            normalized.keywords = locationKeywords;
+          }
+          console.log(`🔍 [NORMALIZE] Added location words to keywords: "${normalized.keywords}"`);
+        }
       }
     }
 
@@ -394,9 +439,17 @@ class MarketplaceSearchService {
       normalized['area.max'] = params.maxArea ? parseFloat(params.maxArea) : undefined;
     }
 
-    // Keywords/search query
+    // Keywords/search query - merge with location keywords if set
     if (params.keywords || params.query) {
-      normalized.keywords = (params.keywords || params.query).substring(0, 200); // Max 200 chars
+      const searchKeywords = params.keywords || params.query;
+      // If location keywords were already added, merge them
+      if (normalized.keywords) {
+        // Location keywords already set, merge with search keywords
+        normalized.keywords = `${searchKeywords} ${normalized.keywords}`.substring(0, 200);
+      } else {
+        // No location keywords, just use search keywords
+        normalized.keywords = searchKeywords.substring(0, 200);
+      }
     }
 
     // Dynamic attributes for vehicles (if category is vehicles)

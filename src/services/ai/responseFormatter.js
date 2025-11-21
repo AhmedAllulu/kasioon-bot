@@ -65,9 +65,12 @@ class ResponseFormatter {
     // Category with emoji
     if (item.category) {
       const categoryEmoji = this.getCategoryEmoji(item.category.slug);
-      const categoryName = isArabic
-        ? item.category.name_ar || item.category.name || item.category.nameAr
-        : item.category.name_en || item.category.name || item.category.nameEn;
+      // API returns 'name' field which is already in the correct language
+      // Fallback to name_ar/nameAr for Arabic, name_en/nameEn for English if name is not available
+      const categoryName = item.category.name || 
+        (isArabic 
+          ? item.category.name_ar || item.category.nameAr
+          : item.category.name_en || item.category.nameEn);
       if (categoryName) {
         listing += `   ${categoryEmoji} ${this.escapeMarkdown(categoryName)}\n`;
       }
@@ -288,9 +291,12 @@ class ResponseFormatter {
           : `• Without price filter: ${suggestion.count} results\n`;
       }
       if (suggestion.type === 'parent_category') {
-        const catName = isArabic
-          ? suggestion.category.name_ar || suggestion.category.name
-          : suggestion.category.name_en || suggestion.category.name;
+        // API returns 'name' field which is already in the correct language
+        // Fallback to name_ar/nameAr for Arabic, name_en/nameEn for English if name is not available
+        const catName = suggestion.category.name || 
+          (isArabic
+            ? suggestion.category.name_ar || suggestion.category.nameAr
+            : suggestion.category.name_en || suggestion.category.nameEn);
         message += isArabic
           ? `• في ${catName}: ${suggestion.count} نتيجة\n`
           : `• In ${catName}: ${suggestion.count} results\n`;
