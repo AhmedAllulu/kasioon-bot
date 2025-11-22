@@ -979,7 +979,7 @@ class MarketplaceSearchService {
     const strategies = [];
     const keywords = params.keywords || '';
     const words = keywords.split(/\s+/).filter(w => w.length > 1);
-    
+
     // Strategy 1: Full phrase with all params (most specific)
     if (keywords) {
       strategies.push({
@@ -987,7 +987,7 @@ class MarketplaceSearchService {
         params: { ...params }
       });
     }
-    
+
     // Strategy 2: Try each word individually (for Arabic word variations)
     if (words.length > 1) {
       words.forEach((word, index) => {
@@ -997,7 +997,7 @@ class MarketplaceSearchService {
         });
       });
     }
-    
+
     // Strategy 3: Category + Location only (no keywords)
     if (params.category || params.city) {
       const broadParams = { ...params };
@@ -1007,7 +1007,7 @@ class MarketplaceSearchService {
         params: broadParams
       });
     }
-    
+
     // Strategy 4: Category only (broadest)
     if (params.category) {
       strategies.push({
@@ -1015,9 +1015,277 @@ class MarketplaceSearchService {
         params: { category: params.category }
       });
     }
-    
+
     return strategies;
   }
+
+  // ==================== NEW DYNAMIC API METHODS ====================
+
+  /**
+   * Get lightweight search structure (root categories only)
+   * Endpoint: GET /api/search/structure/lightweight
+   */
+  async getLightweightStructure(includeIcon = true) {
+    try {
+      const cacheKey = `structure:lightweight:${this.language}:${includeIcon}`;
+      const cached = await cache.get(cacheKey);
+      if (cached) {
+        console.log('✅ [SEARCH] Using cached lightweight structure');
+        return JSON.parse(cached);
+      }
+
+      const response = await axios.get(`${this.apiUrl}/api/search/structure/lightweight`, {
+        params: { language: this.language, icon: includeIcon },
+        headers: this.getHeaders(),
+        timeout: 15000
+      });
+
+      if (response.data?.success && response.data?.data?.structure) {
+        const structure = response.data.data.structure;
+        await cache.set(cacheKey, JSON.stringify(structure), 1800);
+        console.log('✅ [SEARCH] Lightweight structure loaded');
+        return structure;
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ [SEARCH] Error loading lightweight structure:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Get category hierarchy
+   * Endpoint: GET /api/search/categories/hierarchy
+   */
+  async getCategoryHierarchy(options = {}) {
+    try {
+      const { includeInactive = false, transactionTypeId = null } = options;
+      const cacheKey = `hierarchy:${this.language}:${includeInactive}:${transactionTypeId}`;
+      const cached = await cache.get(cacheKey);
+      if (cached) {
+        console.log('✅ [SEARCH] Using cached category hierarchy');
+        return JSON.parse(cached);
+      }
+
+      const response = await axios.get(`${this.apiUrl}/api/search/categories/hierarchy`, {
+        params: { language: this.language, includeInactive, transactionTypeId },
+        headers: this.getHeaders(),
+        timeout: 15000
+      });
+
+      if (response.data?.success && response.data?.data?.hierarchy) {
+        const hierarchy = response.data.data.hierarchy;
+        await cache.set(cacheKey, JSON.stringify(hierarchy), 3600);
+        console.log('✅ [SEARCH] Category hierarchy loaded');
+        return hierarchy;
+      }
+      return [];
+    } catch (error) {
+      console.error('❌ [SEARCH] Error loading hierarchy:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get child categories by parent ID
+   * Endpoint: GET /api/search/categories/{categoryId}
+   */
+  async getChildCategories(categoryId, options = {}) {
+    try {
+      const { includeInactive = false, transactionTypeId = null } = options;
+      const cacheKey = `children:${categoryId}:${this.language}:${includeInactive}:${transactionTypeId}`;
+      const cached = await cache.get(cacheKey);
+      if (cached) {
+        console.log(`✅ [SEARCH] Using cached children for ${categoryId}`);
+        return JSON.parse(cached);
+      }
+
+      const response = await axios.get(`${this.apiUrl}/api/search/categories/${categoryId}`, {
+        params: { language: this.language, includeInactive, transactionTypeId },
+        headers: this.getHeaders(),
+        timeout: 10000
+      });
+
+      if (response.data?.success && response.data?.data?.categories) {
+        const categories = response.data.data.categories;
+        await cache.set(cacheKey, JSON.stringify(categories), 3600);
+        console.log(`✅ [SEARCH] Found ${categories.length} child categories`);
+        return categories;
+      }
+      return [];
+    } catch (error) {
+      console.error(`❌ [SEARCH] Error loading children for ${categoryId}:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Search categories by name/slug
+   * Endpoint: GET /api/categories/search/{searchTerm}
+   */
+  async searchCategories(searchTerm) {
+    try {
+      const cacheKey = `search:categories:${searchTerm}:${this.language}`;
+      const cached = await cache.get(cacheKey);
+      if (cached) {
+        console.log('✅ [SEARCH] Using cached category search');
+        return JSON.parse(cached);
+      }
+
+      const response = await axios.get(
+        `${this.apiUrl}/api/categories/search/${encodeURIComponent(searchTerm)}`,
+        {
+          params: { language: this.language },
+          headers: this.getHeaders(),
+          timeout: 10000
+        }
+      );
+
+      if (response.data?.success && response.data?.data?.categories) {
+        const categories = response.data.data.categories;
+        await cache.set(cacheKey, JSON.stringify(categories), 300);
+        console.log(`✅ [SEARCH] Found ${categories.length} matching categories`);
+        return categories;
+      }
+      return [];
+    } catch (error) {
+      console.error('❌ [SEARCH] Error searching categories:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get locations hierarchy
+   * Endpoint: GET /api/search/locations/hierarchy
+   */
+  async getLocationsHierarchy() {
+    try {
+      const cacheKey = `locations:hierarchy:${this.language}`;
+      const cached = await cache.get(cacheKey);
+      if (cached) {
+        console.log('✅ [SEARCH] Using cached locations hierarchy');
+        return JSON.parse(cached);
+      }
+
+      const response = await axios.get(`${this.apiUrl}/api/search/locations/hierarchy`, {
+        params: { language: this.language },
+        headers: this.getHeaders(),
+        timeout: 10000
+      });
+
+      if (response.data?.success && response.data?.data?.hierarchy) {
+        const hierarchy = response.data.data.hierarchy;
+        await cache.set(cacheKey, JSON.stringify(hierarchy), 3600);
+        console.log('✅ [SEARCH] Locations hierarchy loaded');
+        return hierarchy;
+      }
+      return { provinces: [] };
+    } catch (error) {
+      console.error('❌ [SEARCH] Error loading locations:', error.message);
+      return { provinces: [] };
+    }
+  }
+
+  /**
+   * Build dynamic AI context - THE MAIN METHOD
+   * Collects all necessary data for AI from API endpoints
+   */
+  async buildDynamicAIContext(userMessage) {
+    try {
+      console.log('🔨 [SEARCH] Building dynamic AI context for:', userMessage);
+
+      const context = { message: userMessage, language: this.language };
+
+      // Step 1: Try to detect category from message
+      const detected = await this.detectCategoryFromMessage(userMessage);
+      context.detectedCategories = detected;
+
+      if (detected.length > 0) {
+        // Specific category detected - get its details
+        const mainCat = detected[0];
+        console.log(`📂 [SEARCH] Detected category: ${mainCat.slug} (${mainCat.name})`);
+
+        // Get filters for this category
+        const filterData = await this.getCategoryFilters(mainCat.slug);
+        context.categoryFilters = filterData?.filters || [];
+        context.categoryDetails = filterData?.category;
+
+        // Get children if parent category
+        if (mainCat.hasChildren) {
+          context.childCategories = await this.getChildCategories(mainCat.id);
+        }
+      } else {
+        // No specific category - load lightweight structure
+        console.log('📂 [SEARCH] No category detected, loading lightweight structure');
+        const structure = await this.getLightweightStructure(true);
+        context.allCategories = structure?.categories || [];
+        context.transactionTypes = structure?.transactionTypes || [];
+      }
+
+      // Step 2: Always include locations
+      context.locations = await this.getLocationsHierarchy();
+
+      console.log('✅ [SEARCH] Dynamic context built:', {
+        detected: detected.length > 0,
+        filters: context.categoryFilters?.length || 0,
+        children: context.childCategories?.length || 0,
+        allCats: context.allCategories?.length || 0,
+        provinces: context.locations?.provinces?.length || 0
+      });
+
+      return context;
+    } catch (error) {
+      console.error('❌ [SEARCH] Error building context:', error);
+      return { message: userMessage, language: this.language, error: error.message };
+    }
+  }
+
+  /**
+   * Detect category from user message using category search
+   */
+  async detectCategoryFromMessage(message) {
+    try {
+      // Extract keywords from message
+      const stopWords = ['في', 'من', 'إلى', 'على', 'عن', 'مع', 'أن', 'هذا', 'ذلك', 'بدي', 'بدك', 'أريد', 'عايز', 'the', 'and', 'for', 'with'];
+      const keywords = message
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(w => w.length >= 3 && !stopWords.includes(w));
+
+      const results = [];
+
+      // Search for each keyword (limit to first 3 keywords)
+      for (const keyword of keywords.slice(0, 3)) {
+        const matches = await this.searchCategories(keyword);
+        results.push(...matches);
+      }
+
+      // Remove duplicates based on ID
+      const unique = [...new Map(results.map(item => [item.id, item])).values()];
+
+      return unique.slice(0, 3); // Return top 3 matches
+    } catch (error) {
+      console.error('❌ [SEARCH] Error detecting category:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get request headers with optional authentication
+   */
+  getHeaders() {
+    const headers = { 'Accept': 'application/json' };
+    const hasValidKey = this.apiKey &&
+                        this.apiKey.trim() !== '' &&
+                        this.apiKey !== 'your_api_key_here' &&
+                        !this.apiKey.includes('your_');
+    if (hasValidKey) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
+    return headers;
+  }
+
+  // ==================== END NEW METHODS ====================
 }
 
 module.exports = new MarketplaceSearchService();

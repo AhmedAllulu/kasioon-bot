@@ -155,18 +155,34 @@ class AIAgent {
         provider: this.provider
       });
 
-      // Step 1: Fetch root categories first
-      console.log('📂 [AI-ANALYZE] Fetching root categories...');
+      // Step 1: Build complete dynamic context from API
+      console.log('🔨 [AI-ANALYZE] Building dynamic context from API endpoints...');
+      let dynamicContext = {};
       let categories = [];
+
       try {
-        categories = await marketplaceSearch.getCategories();
-        console.log('✅ [AI-ANALYZE] Categories fetched:', categories.length, 'categories');
-        console.log('📋 [AI-ANALYZE] Available categories:', categories.map(c => ({
-          slug: c.slug,
-          name: c.name
-        })));
-      } catch (categoryError) {
-        console.warn('⚠️  [AI-ANALYZE] Failed to fetch categories, continuing without category validation:', categoryError.message);
+        // Get ALL dynamic data from API endpoints
+        dynamicContext = await marketplaceSearch.buildDynamicAIContext(message);
+
+        // Extract categories based on what was detected
+        if (dynamicContext.detectedCategories && dynamicContext.detectedCategories.length > 0) {
+          categories = dynamicContext.detectedCategories;
+          console.log('✅ [AI-ANALYZE] Detected specific categories:', categories.map(c => `${c.slug} (${c.name})`).join(', '));
+        } else if (dynamicContext.allCategories && dynamicContext.allCategories.length > 0) {
+          categories = dynamicContext.allCategories;
+          console.log('✅ [AI-ANALYZE] Using all root categories:', categories.length);
+        } else {
+          console.warn('⚠️  [AI-ANALYZE] No categories in dynamic context');
+        }
+      } catch (contextError) {
+        console.error('❌ [AI-ANALYZE] Failed to build dynamic context:', contextError.message);
+        // Fallback: try to get just categories
+        try {
+          categories = await marketplaceSearch.getCategories();
+          console.log('⚠️  [AI-ANALYZE] Using fallback categories:', categories.length);
+        } catch (fallbackError) {
+          console.warn('⚠️  [AI-ANALYZE] Fallback categories fetch also failed');
+        }
       }
       
       // Detect language from message if not provided
@@ -177,19 +193,102 @@ class AIAgent {
         message_preview: message.substring(0, 50)
       });
       
-      // Build category list for AI prompt
-      // Note: API returns 'name' field which is in the requested language (ar/en)
-      let categoryList = '';
-      if (categories.length > 0) {
-        const categoryNames = categories.map(cat => {
-          // Use 'name' field which is already in the correct language
-          const name = cat.name || cat.nameAr || cat.nameEn || cat.slug;
-          return `- ${cat.slug} (${name})`;
-        }).join('\n');
-        categoryList = `\n\nAvailable categories (use the exact slug):\n${categoryNames}\n\nIMPORTANT: You MUST use one of these exact category slugs. If the user's intent doesn't match any category, set category to null.`;
+      // Build rich prompt with ALL dynamic context
+      let promptContext = '';
+      const isArabic = detectedLanguage === 'ar';
+
+      // If a specific category was detected
+      if (dynamicContext.detectedCategories && dynamicContext.detectedCategories.length > 0) {
+        const mainCat = dynamicContext.detectedCategories[0];
+        promptContext += `\n\n🎯 DETECTED CATEGORY (High confidence):\n`;
+        promptContext += `- Slug: ${mainCat.slug}\n`;
+        promptContext += `- Name: ${mainCat.name}\n`;
+        promptContext += `- Level: ${mainCat.level || 'root'}\n`;
+        if (mainCat.hasChildren) {
+          promptContext += `- Has subcategories: YES\n`;
+        }
+        if (mainCat.listingCount) {
+          promptContext += `- Listings: ${mainCat.listingCount}\n`;
+        }
+
+        // Add subcategories if available
+        if (dynamicContext.childCategories && dynamicContext.childCategories.length > 0) {
+          promptContext += `\n📂 SUBCATEGORIES (you can use these for more specific search):\n`;
+          dynamicContext.childCategories.slice(0, 15).forEach(child => {
+            promptContext += `- ${child.slug}: ${child.name}`;
+            if (child.listingCount) promptContext += ` [${child.listingCount} listings]`;
+            promptContext += `\n`;
+          });
+          if (dynamicContext.childCategories.length > 15) {
+            promptContext += `... and ${dynamicContext.childCategories.length - 15} more subcategories\n`;
+          }
+        }
+
+        // Add available filters for this category
+        if (dynamicContext.categoryFilters && dynamicContext.categoryFilters.length > 0) {
+          promptContext += `\n🔍 AVAILABLE FILTERS (extract these from message):\n`;
+          dynamicContext.categoryFilters.forEach(filter => {
+            promptContext += `\n${filter.name} (type: ${filter.type}):\n`;
+            if (filter.type === 'select' && filter.options) {
+              promptContext += `  Options:\n`;
+              filter.options.slice(0, 8).forEach(opt => {
+                const label = isArabic ? opt.label_ar : opt.label_en;
+                promptContext += `  - ${opt.value}: ${label || opt.label}\n`;
+              });
+              if (filter.options.length > 8) {
+                promptContext += `  ... and ${filter.options.length - 8} more options\n`;
+              }
+            } else if (filter.type === 'number') {
+              let rangeStr = '';
+              if (filter.min) rangeStr += `min: ${filter.min}`;
+              if (filter.min && filter.max) rangeStr += ', ';
+              if (filter.max) rangeStr += `max: ${filter.max}`;
+              if (!filter.min && !filter.max) rangeStr = 'any value';
+              promptContext += `  Range: ${rangeStr}`;
+              if (filter.unit) promptContext += ` (unit: ${filter.unit})`;
+              promptContext += `\n`;
+            }
+          });
+        }
       } else {
-        categoryList = '\n\nCommon categories: vehicles, real-estate, electronics, furniture, fashion, services';
+        // No specific category detected - show all root categories
+        if (categories.length > 0) {
+          promptContext += `\n\n📂 AVAILABLE ROOT CATEGORIES:\n`;
+          categories.forEach(cat => {
+            promptContext += `- ${cat.slug}: ${cat.name}`;
+            if (cat.hasChildren) promptContext += ` (has subcategories)`;
+            if (cat.listingCount) promptContext += ` [${cat.listingCount} listings]`;
+            promptContext += `\n`;
+          });
+          promptContext += `\nIMPORTANT: You MUST use one of these exact category slugs. If unsure, set category to null.\n`;
+        }
+
+        // Add transaction types
+        if (dynamicContext.transactionTypes && dynamicContext.transactionTypes.length > 0) {
+          promptContext += `\n💱 TRANSACTION TYPES:\n`;
+          dynamicContext.transactionTypes.forEach(tt => {
+            promptContext += `- ${tt.slug}: ${tt.name}`;
+            if (tt.listingCount) promptContext += ` [${tt.listingCount} listings]`;
+            promptContext += `\n`;
+          });
+        }
       }
+
+      // Always add available provinces/locations
+      if (dynamicContext.locations && dynamicContext.locations.provinces && dynamicContext.locations.provinces.length > 0) {
+        promptContext += `\n📍 AVAILABLE PROVINCES:\n`;
+        dynamicContext.locations.provinces.slice(0, 12).forEach(prov => {
+          promptContext += `- ${prov.name}`;
+          if (prov.cityCount) promptContext += ` (${prov.cityCount} cities)`;
+          if (prov.listingCount) promptContext += ` [${prov.listingCount} listings]`;
+          promptContext += `\n`;
+        });
+        if (dynamicContext.locations.provinces.length > 12) {
+          promptContext += `... and ${dynamicContext.locations.provinces.length - 12} more provinces\n`;
+        }
+      }
+
+      let categoryList = promptContext || '\n\nCommon categories: vehicles, real-estate, electronics, furniture, fashion, services';
       
       const systemPrompt = `You are an AI assistant helping users search for items on kasioon.com marketplace in Syria.${categoryList}
 
