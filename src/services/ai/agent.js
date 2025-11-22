@@ -4,7 +4,7 @@ const logger = require('../../utils/logger');
 const marketplaceSearch = require('../search/marketplaceSearch');
 const modelManager = require('./modelManager');
 const cache = require('../cache');
-const ArabicNormalizer = require('../../utils/arabicNormalizer');
+const AttributeMatcher = require('./attributeMatcher');
 const FilterMatcher = require('./filterMatcher');
 const MatchScorer = require('./matchScorer');
 const ResultValidator = require('../search/resultValidator');
@@ -166,62 +166,61 @@ class AIAgent {
   }
 
   /**
-   * Analyze message and extract search parameters
+   * Analyze message with keyword expansion and intelligent category suggestions
+   * 🆕 ENHANCED: Returns expanded keywords and suggested categories for smart search
    * @param {string} message - User message
    * @param {string} language - Message language (ar/en)
-   * @returns {Promise<Object>} Extracted search parameters
+   * @returns {Promise<Object>} Extracted search parameters with keyword expansion
    */
   async analyzeMessage(message, language = 'ar') {
     const taskType = 'extract_params';
 
     try {
+      // ========================================================================
+      // DEBUG STEP 1: USER MESSAGE
+      // ========================================================================
+      console.log('\n' + '='.repeat(80));
+      console.log('📱 [DEBUG STEP 1] USER MESSAGE');
+      console.log('='.repeat(80));
+      console.log('Message:', message);
+      console.log('Language:', language);
+      console.log('Message Length:', message.length);
+      console.log('='.repeat(80) + '\n');
+
       // Check cache for similar queries (cost saving)
       if (modelManager.shouldCache(taskType)) {
         const cacheKey = `ai:params:${this.hashString(message)}`;
         const cached = await cache.get(cacheKey);
         if (cached) {
           logger.info('✅ [AI-ANALYZE] Using cached response for parameter extraction');
-          return JSON.parse(cached);
+          const cachedParams = JSON.parse(cached);
+          console.log('\n' + '='.repeat(80));
+          console.log('💾 [DEBUG] USING CACHED RESPONSE');
+          console.log('='.repeat(80));
+          console.log('Cached Params:', JSON.stringify(cachedParams, null, 2));
+          console.log('='.repeat(80) + '\n');
+          return cachedParams;
         }
       }
 
-      console.log('🤖 [AI-ANALYZE] Starting analysis...');
+      console.log('🤖 [AI-ANALYZE] Starting analysis with keyword expansion...');
       console.log('📥 [AI-ANALYZE] Input:', {
         message: message,
         language: language,
         provider: this.provider
       });
 
-      // Step 1: Build complete dynamic context from API
-      console.log('🔨 [AI-ANALYZE] Building dynamic context from API endpoints...');
-      let dynamicContext = {};
+      // Step 1: Get ONLY root categories (simplified context)
+      console.log('🔨 [AI-ANALYZE] Fetching root categories only...');
       let categories = [];
 
       try {
-        // Get ALL dynamic data from API endpoints
-        dynamicContext = await marketplaceSearch.buildDynamicAIContext(message);
-
-        // Extract categories based on what was detected
-        if (dynamicContext.detectedCategories && dynamicContext.detectedCategories.length > 0) {
-          categories = dynamicContext.detectedCategories;
-          console.log('✅ [AI-ANALYZE] Detected specific categories:', categories.map(c => `${c.slug} (${c.name})`).join(', '));
-        } else if (dynamicContext.allCategories && dynamicContext.allCategories.length > 0) {
-          categories = dynamicContext.allCategories;
-          console.log('✅ [AI-ANALYZE] Using all root categories:', categories.length);
-        } else {
-          console.warn('⚠️  [AI-ANALYZE] No categories in dynamic context');
-        }
+        categories = await marketplaceSearch.getCategories();
+        console.log('✅ [AI-ANALYZE] Loaded root categories:', categories.length);
       } catch (contextError) {
-        console.error('❌ [AI-ANALYZE] Failed to build dynamic context:', contextError.message);
-        // Fallback: try to get just categories
-        try {
-          categories = await marketplaceSearch.getCategories();
-          console.log('⚠️  [AI-ANALYZE] Using fallback categories:', categories.length);
-        } catch (fallbackError) {
-          console.warn('⚠️  [AI-ANALYZE] Fallback categories fetch also failed');
-        }
+        console.error('❌ [AI-ANALYZE] Failed to fetch categories:', contextError.message);
       }
-      
+
       // Detect language from message if not provided
       const detectedLanguage = language || detectLanguage(message);
       console.log('🌐 [AI-ANALYZE] Language detection:', {
@@ -229,196 +228,172 @@ class AIAgent {
         detected: detectedLanguage,
         message_preview: message.substring(0, 50)
       });
-      
-      // Build rich prompt with ALL dynamic context
-      let promptContext = '';
+
+      // Step 2: Build simplified prompt with ROOT categories only
       const isArabic = detectedLanguage === 'ar';
+      let categoryList = '';
 
-      // If a specific category was detected
-      if (dynamicContext.detectedCategories && dynamicContext.detectedCategories.length > 0) {
-        const mainCat = dynamicContext.detectedCategories[0];
-        promptContext += `\n\n🎯 DETECTED CATEGORY (High confidence):\n`;
-        promptContext += `- Slug: ${mainCat.slug}\n`;
-        promptContext += `- Name: ${mainCat.name}\n`;
-        promptContext += `- Level: ${mainCat.level || 'root'}\n`;
-        if (mainCat.hasChildren) {
-          promptContext += `- Has subcategories: YES\n`;
-        }
-        if (mainCat.listingCount) {
-          promptContext += `- Listings: ${mainCat.listingCount}\n`;
-        }
-
-        // Add subcategories if available
-        if (dynamicContext.childCategories && dynamicContext.childCategories.length > 0) {
-          promptContext += `\n📂 SUBCATEGORIES (you can use these for more specific search):\n`;
-          dynamicContext.childCategories.slice(0, 15).forEach(child => {
-            promptContext += `- ${child.slug}: ${child.name}`;
-            if (child.listingCount) promptContext += ` [${child.listingCount} listings]`;
-            promptContext += `\n`;
-          });
-          if (dynamicContext.childCategories.length > 15) {
-            promptContext += `... and ${dynamicContext.childCategories.length - 15} more subcategories\n`;
-          }
-        }
-
-        // Add available filters for this category
-        if (dynamicContext.categoryFilters && dynamicContext.categoryFilters.length > 0) {
-          promptContext += `\n🔍 AVAILABLE FILTERS (extract these from message):\n`;
-          dynamicContext.categoryFilters.forEach(filter => {
-            promptContext += `\n${filter.name} (type: ${filter.type}):\n`;
-            if (filter.type === 'select' && filter.options) {
-              promptContext += `  Options:\n`;
-              filter.options.slice(0, 8).forEach(opt => {
-                const label = isArabic ? opt.label_ar : opt.label_en;
-                promptContext += `  - ${opt.value}: ${label || opt.label}\n`;
-              });
-              if (filter.options.length > 8) {
-                promptContext += `  ... and ${filter.options.length - 8} more options\n`;
-              }
-            } else if (filter.type === 'number') {
-              let rangeStr = '';
-              if (filter.min) rangeStr += `min: ${filter.min}`;
-              if (filter.min && filter.max) rangeStr += ', ';
-              if (filter.max) rangeStr += `max: ${filter.max}`;
-              if (!filter.min && !filter.max) rangeStr = 'any value';
-              promptContext += `  Range: ${rangeStr}`;
-              if (filter.unit) promptContext += ` (unit: ${filter.unit})`;
-              promptContext += `\n`;
-            }
-          });
-        }
-      } else {
-        // No specific category detected - show all root categories
-        if (categories.length > 0) {
-          promptContext += `\n\n📂 AVAILABLE ROOT CATEGORIES:\n`;
-          categories.forEach(cat => {
-            promptContext += `- ${cat.slug}: ${cat.name}`;
-            if (cat.hasChildren) promptContext += ` (has subcategories)`;
-            if (cat.listingCount) promptContext += ` [${cat.listingCount} listings]`;
-            promptContext += `\n`;
-          });
-          promptContext += `\nIMPORTANT: You MUST use one of these exact category slugs. If unsure, set category to null.\n`;
-        }
-
-        // Add transaction types
-        if (dynamicContext.transactionTypes && dynamicContext.transactionTypes.length > 0) {
-          promptContext += `\n💱 TRANSACTION TYPES:\n`;
-          dynamicContext.transactionTypes.forEach(tt => {
-            promptContext += `- ${tt.slug}: ${tt.name}`;
-            if (tt.listingCount) promptContext += ` [${tt.listingCount} listings]`;
-            promptContext += `\n`;
-          });
-        }
-      }
-
-      // Always add available provinces/locations
-      if (dynamicContext.locations && dynamicContext.locations.provinces && dynamicContext.locations.provinces.length > 0) {
-        promptContext += `\n📍 AVAILABLE PROVINCES:\n`;
-        dynamicContext.locations.provinces.slice(0, 12).forEach(prov => {
-          promptContext += `- ${prov.name}`;
-          if (prov.cityCount) promptContext += ` (${prov.cityCount} cities)`;
-          if (prov.listingCount) promptContext += ` [${prov.listingCount} listings]`;
-          promptContext += `\n`;
+      if (categories.length > 0) {
+        categoryList = `\n\n📂 AVAILABLE ROOT CATEGORIES (فقط الفئات الأساسية):\n`;
+        categories.forEach(cat => {
+          categoryList += `- ${cat.slug}: ${cat.name}\n`;
         });
-        if (dynamicContext.locations.provinces.length > 12) {
-          promptContext += `... and ${dynamicContext.locations.provinces.length - 12} more provinces\n`;
-        }
+      } else {
+        categoryList = '\n\nCommon root categories: vehicles, real-estate, electronics, furniture, fashion, services';
       }
 
-      let categoryList = promptContext || '\n\nCommon categories: vehicles, real-estate, electronics, furniture, fashion, services';
+      const systemPrompt = isArabic ?
+`أنت مساعد ذكي لمنصة قاسيون للإعلانات المبوبة في سوريا.${categoryList}
 
-      const systemPrompt = `You are an AI assistant helping users search for items on kasioon.com marketplace in Syria.${categoryList}
+🎯 **مهمتك الرئيسية:**
+عندما يطلب المستخدم البحث، قم بما يلي:
 
-IMPORTANT: The user's message is in ${detectedLanguage === 'ar' ? 'Arabic' : 'English'}. Extract search parameters from the user's message and return them in JSON format.
+1️⃣ **استخرج الكلمة المفتاحية الأساسية** من رسالة المستخدم
+2️⃣ **وسّع الكلمات المفتاحية**: اقترح 4-5 كلمات مشابهة أو بديلة تختلف في الكتابة ولكنها تعني نفس الشيء والأفضل أن تكون من كلمة واحدة فقط
 
-⚠️ CRITICAL RULE - ALWAYS USE THE MOST SPECIFIC (LEAF) CATEGORY:
-- NEVER use generic/root categories like "real-estate" or "vehicles"
-- ALWAYS use the most specific subcategory that matches the user's request
-- Examples of CORRECT specific categories:
-  ✅ "houses" (not "real-estate") for بيت/منزل/دار
-  ✅ "apartments" (not "real-estate") for شقة/شقق
-  ✅ "lands" (not "real-estate") for أرض/أراضي
-  ✅ "cars" (not "vehicles") for سيارة/سيارات
-  ✅ "motorcycles" (not "vehicles") for دراجة نارية
-  ✅ "villas" (not "real-estate") for فيلا/فيلات
+   📌 **أمثلة على توسيع الكلمات:**
+   - "شقة" → ["شقة", "شقق", "استديو", "وحدة سكنية", "بيت "]
+   - "سيارة تويوتا" → ["تويوتا", "toyota", "توي", "طويوطة", "تويوته"]
+   - "لابتوب" → ["لابتوب", "laptop", "حاسوب ", "كمبيوتر ", "نوت بوك"]
+   - "منزل" → ["منزل", "بيت", "دار", "مسكن", "house"]
 
-Extract the following parameters if mentioned:
-- city: The city where they want to search (e.g., Aleppo, Damascus, Homs, Latakia)
-- category: SPECIFIC category slug - use the MOST SPECIFIC subcategory available
-- keywords: General search keywords (extract from user message)
-- minPrice: Minimum price
-- maxPrice: Maximum price
-- condition: Item condition (new, used)
+3️⃣ **اقترح الفئات المحتملة** (فقط من القائمة أعلاه - الفئات الجذرية فقط)
 
-SPECIFIC CATEGORIZATION RULES (USE LEAF CATEGORIES):
+4️⃣ **استخرج الخصائص المطلوبة** (إن وجدت في الرسالة):
+   ⚠️ **تنبيه مهم جداً:**
+   - أسماء الشركات والموديلات **ليست خصائص** في فئة السيارات/الدراجات النارية
+   - مثلاً: "تويوتا"، "كامري"، "هوندا" = فئات فرعية، **ليست خصائص**
+   - الخصائص الحقيقية: اللون، الحالة، السنة، نوع الوقود، الجير، المسافة المقطوعة، إلخ
 
-1. REAL ESTATE SUBCATEGORIES (use specific, not "real-estate"):
-- بيت / منزل / دار → category: "houses"
-- شقة / شقق → category: "apartments"
-- فيلا / فيلات → category: "villas"
-- أرض / أراضي زراعية → category: "lands" or "agricultural-lands"
-- أرض تجارية → category: "commercial-lands"
-- مكتب → category: "offices"
-- محل / دكان → category: "shops"
-- مستودع → category: "warehouses"
+   📌 **أمثلة على الخصائص:**
+   - "سيارة بيضاء" → { "color": "أبيض" }
+   - "شقة 3 غرف" → { "rooms": "3" }
+   - "لابتوب جديد" → { "condition": "جديد" }
+   - "منزل واسع 200 متر" → { "area": "200" }
+   - "سيارة موديل 2020 بنزين" → { "year": "2020", "fuelType": "بنزين" }
 
-2. VEHICLES SUBCATEGORIES (use specific, not "vehicles"):
-- سيارة / سيارات → category: "cars"
-- دراجة نارية / موتور → category: "motorcycles"
-- شاحنة / تريلا → category: "trucks"
-- باص / حافلة → category: "buses"
+5️⃣ **لا تقم بتصفية النتائج** - فقط اقترح الفئات المحتملة
 
-3. ELECTRONICS SUBCATEGORIES (use specific, not "electronics"):
-- لابتوب / حاسوب محمول → category: "laptops"
-- موبايل / جوال / هاتف → category: "mobiles"
-- تابلت / آيباد → category: "tablets"
-- كمبيوتر / حاسوب → category: "computers"
+⚠️ **مهم جداً:**
+- استخدم فقط الفئات الجذرية (root categories) من القائمة أعلاه
+- الكلمات المقترحة يجب أن تشمل: العربية، الإنجليزية، أخطاء إملائية شائعة، مرادفات
+- استخرج الخصائص فقط إذا كانت موجودة في الرسالة
+- أرجع JSON فقط بدون أي نص إضافي
 
-4. SERVICES SUBCATEGORIES (use specific, not "services"):
-- برمجة / تطوير مواقع / شركة برمجة → category: "web-development-programming"
-- تسويق / سوشيال ميديا / إعلانات → category: "digital-marketing-social-media"
-- استشارات / دراسة جدوى → category: "business-consulting-strategy"
-- محاماة / قانون → category: "legal-professional-services"
-- تصميم داخلي / ديكور → category: "interior-design-decoration"
-- تصميم جرافيك → category: "graphic-design-visual-services"
-- تدريب / دورات / تعليم → category: "training-education-services"
-- دعم فني / IT → category: "technology-it-support"
+📋 **هيكل JSON المطلوب:**
+{
+  "intent": "search",
+  "mainKeyword": "الكلمة الأساسية",
+  "expandedKeywords": ["كلمة1", "كلمة2", "كلمة3", "كلمة4", "كلمة5"],
+  "suggestedCategories": ["category-slug-1", "category-slug-2"],
+  "location": "المدينة إن وجدت",
+  "transactionType": "للبيع أو للإيجار إن وجد",
+  "requestedAttributes": {
+    "attributeName": "قيمة الخاصية"
+  }
+}
 
-For vehicles specifically, also extract:
-- carBrand: Car brand/make (e.g., Toyota, BMW, Mercedes)
-- carModel: Specific car model (e.g., Corolla, Camry, 320i)
-- minYear: Minimum year
-- maxYear: Maximum year
-- fuelType: Fuel type (petrol, diesel, electric, hybrid)
-- transmission: Transmission type (manual, automatic)
+🔍 **أمثلة:**
 
-Return ONLY a valid JSON object with the extracted parameters. If a parameter is not mentioned, omit it.
+المستخدم: "بدي شقة 3 غرف للبيع في دمشق"
+الإجابة:
+{
+  "intent": "search",
+  "mainKeyword": "شقة",
+  "expandedKeywords": ["شقة", "شقق", "استديو", "وحدة سكنية", "apartment"],
+  "suggestedCategories": ["real-estate"],
+  "location": "دمشق",
+  "transactionType": "للبيع",
+  "requestedAttributes": {
+    "rooms": "3"
+  }
+}
 
-⚠️ CRITICAL EXAMPLES (notice the SPECIFIC categories used):
+المستخدم: "سيارة بيضاء موديل 2020 في حلب"
+الإجابة:
+{
+  "intent": "search",
+  "mainKeyword": "سيارة",
+  "expandedKeywords": ["سيارة", "سيارات", "مركبة", "عربة", "car"],
+  "suggestedCategories": ["vehicles"],
+  "location": "حلب",
+  "transactionType": null,
+  "requestedAttributes": {
+    "color": "أبيض",
+    "year": "2020"
+  }
+}
 
-User: "أريد سيارة تويوتا في حلب"
-Response: {"city": "Aleppo", "category": "cars", "carBrand": "Toyota", "keywords": "سيارة تويوتا"}
+المستخدم: "لابتوب جديد رخيص"
+الإجابة:
+{
+  "intent": "search",
+  "mainKeyword": "لابتوب",
+  "expandedKeywords": ["لابتوب", "laptop", "حاسوب", "كمبيوتر محمول", "نوت بوك"],
+  "suggestedCategories": ["electronics"],
+  "location": null,
+  "transactionType": null,
+  "requestedAttributes": {
+    "condition": "جديد"
+  }
+}`
+:
+`You are an AI assistant for Qasioun marketplace platform in Syria.${categoryList}
 
-User: "بيت للبيع في حلب"
-Response: {"city": "Aleppo", "category": "houses", "keywords": "بيت للبيع"}
+🎯 **Your Main Task:**
+When user requests a search, do the following:
 
-User: "شقة للبيع في دمشق"
-Response: {"city": "Damascus", "category": "apartments", "keywords": "شقة للبيع"}
+1️⃣ **Extract the main keyword** from user message
+2️⃣ **Expand keywords**: Suggest 4-5 similar or alternative keywords with different spellings but same meaning
 
-User: "أرض زراعية في إدلب"
-Response: {"city": "Idlib", "category": "lands", "keywords": "أرض زراعية"}
+   📌 **Examples of keyword expansion:**
+   - "apartment" → ["apartment", "flat", "studio", "unit", "condo"]
+   - "toyota car" → ["toyota", "توي��تا", "toyo", "toyota vehicle"]
+   - "laptop" → ["laptop", "notebook", "portable computer", "لابتوب"]
 
-User: "فيلا في اللاذقية"
-Response: {"city": "Latakia", "category": "villas", "keywords": "فيلا"}
+3️⃣ **Suggest possible categories** (only from the list above - root categories only)
+4️⃣ **Don't filter results** - only suggest possible categories
 
-User: "بدي شركة برمجة في دمشق"
-Response: {"city": "Damascus", "category": "web-development-programming", "keywords": "شركة برمجة"}
+⚠️ **Important:**
+- Use only root categories from the list above
+- Suggested keywords should include: Arabic, English, common misspellings, synonyms
+- Return JSON only without any additional text
 
-User: "لابتوب مستعمل"
-Response: {"category": "laptops", "keywords": "لابتوب", "condition": "used"}
+📋 **Required JSON Structure:**
+{
+  "intent": "search",
+  "mainKeyword": "main keyword",
+  "expandedKeywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
+  "suggestedCategories": ["category-slug-1", "category-slug-2"],
+  "location": "city if found",
+  "transactionType": "for-sale or for-rent if found"
+}
 
-User: "دراجة نارية في حمص"
-Response: {"city": "Homs", "category": "motorcycles", "keywords": "دراجة نارية"}`;
+🔍 **Examples:**
+
+User: "apartment for sale in Damascus"
+Response:
+{
+  "intent": "search",
+  "mainKeyword": "apartment",
+  "expandedKeywords": ["apartment", "flat", "studio", "unit", "شقة"],
+  "suggestedCategories": ["real-estate"],
+  "location": "Damascus",
+  "transactionType": "for-sale"
+}`;
+
+
+      // ========================================================================
+      // DEBUG STEP 2: PROMPT TO AI
+      // ========================================================================
+      console.log('\n' + '='.repeat(80));
+      console.log('📝 [DEBUG STEP 2] PROMPT TO AI');
+      console.log('='.repeat(80));
+      console.log('System Prompt Length:', systemPrompt.length);
+      console.log('System Prompt (first 500 chars):', systemPrompt.substring(0, 500));
+      console.log('User Message:', message);
+      console.log('Provider:', this.provider);
+      console.log('='.repeat(80) + '\n');
 
       let extractedParams;
 
@@ -428,20 +403,33 @@ Response: {"city": "Homs", "category": "motorcycles", "keywords": "دراجة ن
 
         console.log('🔵 [AI-ANALYZE] Using Anthropic Claude...');
         console.log('🤖 [AI-ANALYZE] Model:', model);
+        const fullPrompt = `${systemPrompt}\n\nUser message: "${message}"`;
+        console.log('📤 [AI-ANALYZE] Full prompt length:', fullPrompt.length);
+        
         const response = await this.anthropic.messages.create({
           model: model,
           max_tokens: maxTokens,
           messages: [
             {
               role: 'user',
-              content: `${systemPrompt}\n\nUser message: "${message}"`
+              content: fullPrompt
             }
           ]
         });
 
         console.log('✅ [AI-ANALYZE] Anthropic response received');
         const content = response.content[0].text;
-        console.log('📄 [AI-ANALYZE] Raw response:', content);
+        
+        // ========================================================================
+        // DEBUG STEP 3: AI RESPONSE
+        // ========================================================================
+        console.log('\n' + '='.repeat(80));
+        console.log('🤖 [DEBUG STEP 3] AI RESPONSE');
+        console.log('='.repeat(80));
+        console.log('Raw Response:', content);
+        console.log('Response Length:', content.length);
+        console.log('='.repeat(80) + '\n');
+        
         extractedParams = JSON.parse(content);
 
         // Track usage
@@ -464,6 +452,23 @@ Response: {"city": "Homs", "category": "motorcycles", "keywords": "دراجة ن
             response_format: { type: 'json_object' }
           };
 
+          // ========================================================================
+          // DEBUG STEP 2: PROMPT TO AI (OpenAI)
+          // ========================================================================
+          console.log('\n' + '='.repeat(80));
+          console.log('📝 [DEBUG STEP 2] PROMPT TO AI (OpenAI)');
+          console.log('='.repeat(80));
+          console.log('Model:', model);
+          console.log('System Prompt Length:', systemPrompt.length);
+          console.log('System Prompt (first 500 chars):', systemPrompt.substring(0, 500));
+          console.log('User Message:', message);
+          console.log('Request Params:', JSON.stringify({
+            model: requestParams.model,
+            messages_count: requestParams.messages.length,
+            response_format: requestParams.response_format
+          }, null, 2));
+          console.log('='.repeat(80) + '\n');
+
           // Some models (like gpt-5-nano) don't support custom temperature
           // Only add temperature if model supports it
           const modelsWithoutTemperature = ['gpt-5-nano'];
@@ -477,7 +482,18 @@ Response: {"city": "Homs", "category": "motorcycles", "keywords": "دراجة ن
 
           console.log('✅ [AI-ANALYZE] OpenAI response received');
           const rawContent = response.choices[0].message.content;
-          console.log('📄 [AI-ANALYZE] Raw response:', rawContent);
+          
+          // ========================================================================
+          // DEBUG STEP 3: AI RESPONSE (OpenAI)
+          // ========================================================================
+          console.log('\n' + '='.repeat(80));
+          console.log('🤖 [DEBUG STEP 3] AI RESPONSE (OpenAI)');
+          console.log('='.repeat(80));
+          console.log('Raw Response:', rawContent);
+          console.log('Response Length:', rawContent.length);
+          console.log('Usage:', JSON.stringify(response.usage, null, 2));
+          console.log('='.repeat(80) + '\n');
+          
           extractedParams = JSON.parse(rawContent);
 
           // Track usage
@@ -556,53 +572,43 @@ Response: {"city": "Homs", "category": "motorcycles", "keywords": "دراجة ن
         throw new Error('No AI provider configured');
       }
 
+      // ========================================================================
+      // DEBUG STEP 3 (continued): PARSED AI RESPONSE
+      // ========================================================================
+      console.log('\n' + '='.repeat(80));
+      console.log('📊 [DEBUG STEP 3] PARSED AI RESPONSE');
+      console.log('='.repeat(80));
+      console.log('Extracted Params:', JSON.stringify(extractedParams, null, 2));
+      console.log('='.repeat(80) + '\n');
+
       console.log('✅ [AI-ANALYZE] Analysis complete!');
-      console.log('📊 [AI-ANALYZE] Extracted params (before validation):', JSON.stringify(extractedParams, null, 2));
-      
-      // Step 2: Validate category against available categories
-      if (extractedParams.category && categories.length > 0) {
-        const categorySlug = extractedParams.category.toLowerCase();
-        const validCategory = categories.find(cat => 
-          cat.slug.toLowerCase() === categorySlug ||
-          cat.name?.toLowerCase() === categorySlug ||
-          cat.name === extractedParams.category ||
-          // Fallback to nameEn/nameAr if name is not available (for backward compatibility)
-          cat.nameEn?.toLowerCase() === categorySlug ||
-          cat.nameAr?.toLowerCase() === categorySlug ||
-          cat.nameAr === extractedParams.category
-        );
-        
-        if (validCategory) {
-          // Use the exact slug from the API
-          extractedParams.category = validCategory.slug;
-          extractedParams.categoryValidated = true;
-          console.log('✅ [AI-ANALYZE] Category validated:', {
-            original: extractedParams.category,
-            validated: validCategory.slug,
-            name: validCategory.name || validCategory.nameAr || validCategory.nameEn
-          });
-        } else {
-          console.warn('⚠️  [AI-ANALYZE] Category not found in available categories:', extractedParams.category);
-          console.warn('⚠️  [AI-ANALYZE] Available categories:', categories.map(c => `${c.slug} (${c.name})`).join(', '));
-          // Keep the category but mark as potentially invalid - let the API handle it
-          extractedParams.categoryValidated = false;
-        }
-      } else if (extractedParams.category && categories.length === 0) {
-        console.log('ℹ️  [AI-ANALYZE] Categories not available, using extracted category as-is:', extractedParams.category);
+
+      // Step 2: Validate expanded keywords structure
+      if (!extractedParams.expandedKeywords || !Array.isArray(extractedParams.expandedKeywords)) {
+        console.log('⚠️  [AI-ANALYZE] No expanded keywords, creating from mainKeyword or message');
+        // Fallback: create expanded keywords from mainKeyword or message
+        const baseKeyword = extractedParams.mainKeyword || extractedParams.keywords || message.trim();
+        extractedParams.expandedKeywords = [baseKeyword];
+        extractedParams.mainKeyword = baseKeyword;
       }
-      
-      // Step 3: Ensure keywords are extracted from the message
-      if (!extractedParams.keywords && message) {
-        // If no keywords extracted but we have a message, use the message as keywords
-        // But only if category is not set (general search)
-        if (!extractedParams.category) {
-          extractedParams.keywords = message.trim();
-          console.log('📝 [AI-ANALYZE] No keywords extracted, using message as keywords:', extractedParams.keywords);
-        }
+
+      // Step 3: Validate suggested categories
+      if (!extractedParams.suggestedCategories || !Array.isArray(extractedParams.suggestedCategories)) {
+        console.log('⚠️  [AI-ANALYZE] No suggested categories, using empty array');
+        extractedParams.suggestedCategories = [];
       }
-      
+
+      // Step 4: Ensure location is properly extracted
+      if (extractedParams.location && !extractedParams.city) {
+        extractedParams.city = extractedParams.location;
+      }
+
       console.log('📊 [AI-ANALYZE] Final extracted params:', JSON.stringify(extractedParams, null, 2));
-      logger.info('Message analyzed successfully', { extractedParams });
+      logger.info('Message analyzed with keyword expansion', {
+        mainKeyword: extractedParams.mainKeyword,
+        expandedCount: extractedParams.expandedKeywords?.length || 0,
+        suggestedCategories: extractedParams.suggestedCategories
+      });
 
       // Cache the result
       if (modelManager.shouldCache(taskType)) {
@@ -701,13 +707,22 @@ Response: {"city": "Homs", "category": "motorcycles", "keywords": "دراجة ن
     try {
       // Detect language from user message if provided, otherwise use provided language
       const detectedLanguage = userMessage ? detectLanguage(userMessage) : language;
+      // ========================================================================
+      // DEBUG STEP 5: FORMATTING INPUT
+      // ========================================================================
+      console.log('\n' + '='.repeat(80));
+      console.log('📝 [DEBUG STEP 5] FORMATTING INPUT');
+      console.log('='.repeat(80));
+      console.log('Results Count:', results?.length || 0);
+      console.log('Provided Language:', language);
+      console.log('Detected Language:', detectedLanguage);
+      console.log('Provider:', this.provider);
+      if (results && results.length > 0) {
+        console.log('First Result Preview:', JSON.stringify(results[0], null, 2).substring(0, 500));
+      }
+      console.log('='.repeat(80) + '\n');
+
       console.log('📝 [AI-FORMAT] Starting result formatting...');
-      console.log('📊 [AI-FORMAT] Input:', {
-        results_count: results?.length || 0,
-        provided_language: language,
-        detected_language: detectedLanguage,
-        provider: this.provider
-      });
       
       if (!results || results.length === 0) {
         console.log('⚠️  [AI-FORMAT] No results to format');
@@ -717,14 +732,15 @@ Response: {"city": "Homs", "category": "motorcycles", "keywords": "دراجة ن
       }
 
       // Add listing URLs and photo URLs to each result before formatting
-      const enrichedResults = results.slice(0, 10).map(result => {
+      // ⚠️ أقصى 7 نتائج - للمزيد يمكن للمستخدم زيارة kasioon.com أو التطبيق
+      const enrichedResults = results.slice(0, 7).map(result => {
         const enriched = { ...result };
-        
+
         // Add listing URL if id exists
         if (result.id) {
           enriched.listingUrl = `https://www.kasioon.com/listing/${result.id}/`;
         }
-        
+
         // Add first photo URL if images exist
         if (result.images && Array.isArray(result.images) && result.images.length > 0) {
           // Handle both string URLs and objects with url property
@@ -734,14 +750,25 @@ Response: {"city": "Homs", "category": "motorcycles", "keywords": "دراجة ن
           // Fallback for single image field
           enriched.photoUrl = typeof result.image === 'string' ? result.image : (result.image.url || result.image);
         }
-        
+
+        // ✨ NEW: Include attribute matching info if available
+        if (result._attributeMatch) {
+          enriched.attributeMatch = {
+            type: result._attributeMatch.type,
+            score: result._attributeMatch.score,
+            matched: result._attributeMatch.matched,
+            unmatched: result._attributeMatch.unmatched,
+            notes: result._attributeMatch.notes
+          };
+        }
+
         return enriched;
       });
 
       // Create a more generic prompt that works for all categories
       // IMPORTANT: Always respond in the same language as the user's original message
       const systemPrompt = detectedLanguage === 'ar'
-        ? `أنت مساعد ذكي يساعد المستخدمين في البحث عن المنتجات في سوق kasioon.com. 
+        ? `أنت مساعد ذكي يساعد المستخدمين في البحث عن المنتجات في سوق kasioon.com.
 
 قم بتنسيق نتائج البحث التالية بشكل واضح وجذاب باللغة العربية فقط. استجب دائماً بالعربية.
 
@@ -754,8 +781,15 @@ Response: {"city": "Homs", "category": "motorcycles", "keywords": "دراجة ن
 - رابط الإعلان (listingUrl) - يجب تضمينه دائماً
 - رابط الصورة (photoUrl) - إذا كان متوفراً
 
+✨ **معلومات مطابقة الخصائص (إن وجدت):**
+- إذا كان للنتيجة حقل attributeMatch، اذكر درجة المطابقة:
+  - exact match → "✅ مطابق تماماً للمواصفات المطلوبة"
+  - partial match → "⚠️ مطابق جزئياً (درجة المطابقة: X%)"
+  - no_match → "❌ غير مطابق للمواصفات"
+- اذكر الخصائص المطابقة والخصائص غير المطابقة
+
 استخدم الإيموجي لجعل الرسالة أكثر جاذبية. كن واضحاً ومختصراً. تأكد من تضمين رابط الإعلان لكل نتيجة.`
-        : `You are an AI assistant helping users search for products on kasioon.com marketplace. 
+        : `You are an AI assistant helping users search for products on kasioon.com marketplace.
 
 Format the following search results in a clear and attractive way in English only. Always respond in English.
 
@@ -767,6 +801,13 @@ For each result, show:
 - Important attributes (rooms, area, brand, etc.)
 - Listing URL (listingUrl) - MUST be included for every result
 - Photo URL (photoUrl) - if available
+
+✨ **Attribute Matching Info (if available):**
+- If result has attributeMatch field, mention the match score:
+  - exact match → "✅ Perfect match for requested specs"
+  - partial match → "⚠️ Partial match (score: X%)"
+  - no_match → "❌ Does not match specs"
+- Mention which attributes matched and which didn't
 
 Use emojis to make the message more engaging. Be clear and concise. Make sure to include the listing URL for every result.`;
 
@@ -867,8 +908,17 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
         }
       }
 
+      // ========================================================================
+      // DEBUG STEP 5 (continued): FORMATTED OUTPUT
+      // ========================================================================
+      console.log('\n' + '='.repeat(80));
+      console.log('✅ [DEBUG STEP 5] FORMATTED OUTPUT');
+      console.log('='.repeat(80));
+      console.log('Formatted Message Length:', formattedMessage?.length || 0);
+      console.log('Formatted Message (first 1000 chars):', formattedMessage?.substring(0, 1000));
+      console.log('='.repeat(80) + '\n');
+
       console.log('✅ [AI-FORMAT] Formatting complete!');
-      console.log('📄 [AI-FORMAT] Formatted message length:', formattedMessage?.length || 0);
       return formattedMessage;
 
     } catch (error) {
@@ -890,7 +940,7 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
   simpleFormat(results, language = 'ar') {
     if (language === 'ar') {
       let message = `🚗 وجدت ${results.length} نتيجة:\n\n`;
-      results.slice(0, 10).forEach((item, index) => {
+      results.slice(0, 7).forEach((item, index) => {
         const title = item.title || item.name || `${item.brand || ''} ${item.model || ''}`.trim() || 'إعلان';
         message += `${index + 1}. ${title}\n`;
         
@@ -947,7 +997,7 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
       return message;
     } else {
       let message = `🚗 Found ${results.length} results:\n\n`;
-      results.slice(0, 10).forEach((item, index) => {
+      results.slice(0, 7).forEach((item, index) => {
         const title = item.title || item.name || `${item.brand || ''} ${item.model || ''}`.trim() || 'Listing';
         message += `${index + 1}. ${title}\n`;
         
@@ -1092,11 +1142,8 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
     try {
       // If results are already within limit, return all
       if (!results || results.length === 0) {
-        console.log('ℹ️  [AI-FILTER] No results to filter');
         return results;
       }
-
-      console.log(`🔍 [AI-FILTER] Scoring ${results.length} results with comprehensive match algorithm...`);
 
       // Calculate match scores for all results
       const scoredResults = results.map(result => {
@@ -1116,39 +1163,19 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
         };
       });
 
-      // Log category-excluded results for debugging
+      // Filter out excluded results
       const excludedResults = scoredResults.filter(r => r.excluded);
-      if (excludedResults.length > 0) {
-        console.log(`🚫 [AI-FILTER] Excluded ${excludedResults.length} results due to category mismatch`);
-        excludedResults.slice(0, 3).forEach(r => {
-          console.log(`   ❌ "${r.title}" (category: ${r.category_slug || r.category?.slug})`);
-        });
-      }
 
       // Sort by match score (descending)
       const sortedResults = MatchScorer.sortByMatchScore(scoredResults);
 
-      console.log(`📊 [AI-FILTER] Score distribution:`);
-      console.log(`   🟢 90-100%: ${sortedResults.filter(r => r.matchScore >= 90).length} results`);
-      console.log(`   🟡 70-89%:  ${sortedResults.filter(r => r.matchScore >= 70 && r.matchScore < 90).length} results`);
-      console.log(`   🟠 50-69%:  ${sortedResults.filter(r => r.matchScore >= 50 && r.matchScore < 70).length} results`);
-      console.log(`   🔴 <50%:    ${sortedResults.filter(r => r.matchScore < 50).length} results`);
-
       // Filter by minimum score threshold
       const filteredResults = MatchScorer.filterByThreshold(sortedResults, minScore);
-      console.log(`✅ [AI-FILTER] ${filteredResults.length} results above ${minScore}% threshold`);
 
       // Return top N results
       const topResults = filteredResults.slice(0, maxResults);
 
       if (topResults.length > 0) {
-        console.log(`✅ [AI-FILTER] Returning top ${topResults.length} results`);
-        console.log(`📊 [AI-FILTER] Score range: ${topResults[0]?.matchScore}% (best) to ${topResults[topResults.length-1]?.matchScore}% (worst)`);
-
-        // Log detailed breakdown of top result
-        if (topResults[0]?.matchDetails) {
-          console.log(`🏆 [AI-FILTER] Top result breakdown:`, topResults[0].matchDetails);
-        }
 
         // Validate results quality
         const language = userParams.language || 'ar';
@@ -1181,73 +1208,201 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
   }
 
   /**
-   * Search marketplace with smart fallback strategies and filter enrichment
-   * IMPROVED: Handles fallback messages and never uses parent categories
-   * @param {Object} params - Search parameters
+   * 🆕 ENHANCED: Search marketplace with intelligent keyword expansion and fallback
+   * Uses new intelligentSearch flow instead of old smartSearch
+   * ✨ NEW: Includes attribute matching for precise results
+   *
+   * @param {Object} params - Search parameters with expandedKeywords
    * @param {string} userMessage - Original user message
    * @param {string} language - Language code
    * @returns {Promise<Object>} Search results with metadata
    */
   async searchMarketplace(params, userMessage = '', language = 'ar') {
     try {
-      console.log('🔍 [AGENT] Starting marketplace search...');
-      console.log('📋 [AGENT] Initial search params:', JSON.stringify(params, null, 2));
+      // ========================================================================
+      // DEBUG STEP 4: SEARCH PARAMETERS
+      // ========================================================================
+      console.log('\n' + '='.repeat(80));
+      console.log('🔍 [DEBUG STEP 4] SEARCH PARAMETERS');
+      console.log('='.repeat(80));
+      console.log('Search Params:', JSON.stringify(params, null, 2));
+      console.log('User Message:', userMessage);
+      console.log('Language:', language);
+      console.log('='.repeat(80) + '\n');
+
+      console.log('🔍 [AGENT] Starting intelligent marketplace search...');
+
+      // Extract requested attributes if available
+      const requestedAttributes = params.requestedAttributes || null;
+      const hasRequestedAttributes = requestedAttributes && Object.keys(requestedAttributes).length > 0;
+
+      if (hasRequestedAttributes) {
+        console.log('✨ [AGENT] User requested specific attributes:', requestedAttributes);
+      }
+
+      // NEW: Check if we have expanded keywords (from new AI analysis)
+      if (params.expandedKeywords && params.expandedKeywords.length > 0) {
+        console.log('🧠 [AGENT] Using intelligent search with keyword expansion');
+
+        // Use new intelligent search method
+        const searchResult = await marketplaceSearch.intelligentSearch(params);
+
+        // Apply relevance filtering if we have results
+        let finalResults = searchResult.results;
+        if (finalResults.length > 0 && userMessage) {
+          finalResults = await this.filterRelevantResults(
+            finalResults,
+            userMessage,
+            params
+          );
+        }
+
+        // ✨ NEW: Apply attribute matching if user requested specific attributes
+        if (hasRequestedAttributes && finalResults.length > 0) {
+          console.log('🎯 [AGENT] Applying attribute matching...');
+          finalResults = await this.applyAttributeMatching(
+            finalResults,
+            requestedAttributes,
+            language
+          );
+        }
+
+        return {
+          results: finalResults,
+          searchType: searchResult.searchType,
+          usedKeywords: searchResult.usedKeywords,
+          matchedCategories: searchResult.matchedCategories,
+          fallbackMessage: this.buildResponseMessage(searchResult, language),
+          attributeMatchingApplied: hasRequestedAttributes
+        };
+      }
+
+      // FALLBACK: Old flow for backward compatibility (if no expanded keywords)
+      console.log('⚠️  [AGENT] No expanded keywords, using legacy smart search');
 
       // Step 1: Enrich parameters with category-specific filters
       const enrichedParams = await this.enrichParametersWithFilters(params, userMessage, language);
-      console.log('📋 [AGENT] Enriched params:', JSON.stringify(enrichedParams, null, 2));
 
-      // Step 2: Use smart search instead of direct search
+      // Step 2: Use smart search
       const { results, usedStrategy, totalStrategiesTried, fallbackMessage } = await marketplaceSearch.smartSearch(enrichedParams);
 
-      console.log(`📊 [AGENT] Smart search complete: ${results.length} results using "${usedStrategy}" (tried ${totalStrategiesTried} strategies)`);
-
-      if (fallbackMessage) {
-        console.log(`💬 [AGENT] Fallback message: ${fallbackMessage[language] || fallbackMessage.ar || fallbackMessage}`);
-      }
-
-      // DEBUG: Log raw results from API before filtering
-      console.log('\n🔍 [DEBUG-AGENT] ========== RAW API RESULTS (BEFORE FILTERING) ==========');
-      console.log('📦 [DEBUG-AGENT] Results count:', results.length);
-      console.log('📋 [DEBUG-AGENT] Full results array:', JSON.stringify(results, null, 2));
-      console.log('🔍 [DEBUG-AGENT] =======================================================\n');
-
-      // Step 3: If we have results, filter and score them by relevance
+      // Step 3: Filter and score results by relevance
+      let filteredResults = results;
       if (results.length > 0 && userMessage) {
-        const filteredResults = await this.filterRelevantResults(
+        filteredResults = await this.filterRelevantResults(
           results,
           userMessage,
           enrichedParams
         );
+      }
 
-        // DEBUG: Log filtered results after processing
-        console.log('\n🔍 [DEBUG-AGENT] ========== FILTERED RESULTS (AFTER PROCESSING) ==========');
-        console.log('📦 [DEBUG-AGENT] Filtered results count:', filteredResults.length);
-        console.log('📋 [DEBUG-AGENT] Full filtered results array:', JSON.stringify(filteredResults, null, 2));
-        console.log('🔍 [DEBUG-AGENT] =======================================================\n');
-
-        return {
-          results: filteredResults,
-          usedStrategy,
-          totalStrategiesTried,
-          filterDescription: enrichedParams.filterDescription || null,
-          matchedFilters: enrichedParams.matchedFilters || null,
-          fallbackMessage: fallbackMessage ? (fallbackMessage[language] || fallbackMessage.ar || fallbackMessage) : null
-        };
+      // ✨ NEW: Apply attribute matching if user requested specific attributes
+      if (hasRequestedAttributes && filteredResults.length > 0) {
+        console.log('🎯 [AGENT] Applying attribute matching...');
+        filteredResults = await this.applyAttributeMatching(
+          filteredResults,
+          requestedAttributes,
+          language
+        );
       }
 
       return {
-        results,
+        results: filteredResults,
         usedStrategy,
         totalStrategiesTried,
-        filterDescription: null,
-        matchedFilters: null,
-        fallbackMessage: fallbackMessage ? (fallbackMessage[language] || fallbackMessage.ar || fallbackMessage) : null
+        filterDescription: enrichedParams.filterDescription || null,
+        matchedFilters: enrichedParams.matchedFilters || null,
+        fallbackMessage: fallbackMessage ? (fallbackMessage[language] || fallbackMessage.ar || fallbackMessage) : null,
+        attributeMatchingApplied: hasRequestedAttributes
       };
     } catch (error) {
       console.error('❌ [AGENT] Search error:', error.message);
       throw error;
     }
+  }
+
+  /**
+   * ✨ NEW: Apply attribute matching to search results
+   * تطبيق مطابقة الخصائص على نتائج البحث
+   *
+   * @param {Array} searchResults - Search results from marketplace
+   * @param {Object} requestedAttributes - Attributes requested by user
+   * @param {string} language - Language code (ar/en)
+   * @returns {Promise<Array>} Results with attribute matching applied and reordered
+   */
+  async applyAttributeMatching(searchResults, requestedAttributes, language = 'ar') {
+    try {
+      console.log('🎯 [ATTR-MATCH] Starting attribute matching process...');
+      console.log(`📊 [ATTR-MATCH] Processing ${searchResults.length} results`);
+      console.log('📋 [ATTR-MATCH] Requested attributes:', requestedAttributes);
+
+      // Step 1: Extract relevant attributes from listings (للاقتصاد - نرسل فقط الخصائص المطلوبة للـ AI)
+      const extractedData = AttributeMatcher.extractRelevantAttributes(
+        searchResults,
+        requestedAttributes
+      );
+
+      // Step 2: Match attributes using AI
+      const matchedResults = await AttributeMatcher.matchWithAI(
+        requestedAttributes,
+        extractedData,
+        this, // Pass the AI agent instance
+        language
+      );
+
+      // Step 3: Reorder by match score
+      const reorderedMatches = AttributeMatcher.reorderByMatchScore(matchedResults);
+
+      // Step 4: Apply matching data to original search results
+      const enhancedResults = AttributeMatcher.applyMatchingToResults(
+        searchResults,
+        reorderedMatches
+      );
+
+      console.log('✅ [ATTR-MATCH] Attribute matching complete');
+      console.log(`📊 [ATTR-MATCH] Results breakdown:`);
+      console.log(`   - Exact matches: ${enhancedResults.filter(r => r._attributeMatch?.type === 'exact').length}`);
+      console.log(`   - Partial matches: ${enhancedResults.filter(r => r._attributeMatch?.type === 'partial').length}`);
+      console.log(`   - No matches: ${enhancedResults.filter(r => r._attributeMatch?.type === 'no_match').length}`);
+
+      return enhancedResults;
+
+    } catch (error) {
+      console.error('❌ [ATTR-MATCH] Error in attribute matching:', error.message);
+      logger.error('Error applying attribute matching:', error);
+      // Fallback: return original results without attribute matching
+      return searchResults;
+    }
+  }
+
+  /**
+   * 🆕 Build user-friendly response message based on search results
+   * بناء رسالة ودية للمستخدم بناءً على نتائج البحث
+   *
+   * @param {Object} searchResult - Result from intelligent search
+   * @param {string} language - Language code (ar/en)
+   * @returns {string|null} Response message or null
+   */
+  buildResponseMessage(searchResult, language = 'ar') {
+    const { searchType, matchedCategories, message } = searchResult;
+
+    if (searchType === 'exact') {
+      // Found results with exact keywords - no message needed
+      return null;
+    }
+
+    if (searchType === 'similar' && matchedCategories && matchedCategories.length > 0) {
+      const categoryNames = matchedCategories.map(c => c.name).join('، ');
+      return language === 'ar'
+        ? `⚠️ لم نجد نتائج مطابقة تماماً، لكن وجدنا نتائج مشابهة في: ${categoryNames}`
+        : `⚠️ No exact matches found, but found similar results in: ${categoryNames}`;
+    }
+
+    if (searchType === 'no_results' && message) {
+      return message[language] || message.ar || message;
+    }
+
+    return null;
   }
 
   /**
@@ -1263,6 +1418,72 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
       hash = hash & hash; // Convert to 32bit integer
     }
     return hash.toString(16);
+  }
+
+  /**
+   * 🆕 Match attributes using AI
+   * مطابقة الخصائص باستخدام الـ AI
+   *
+   * @param {Object} prompt - Prompt object with systemPrompt and dataPrompt
+   * @param {string} language - Language code (ar/en)
+   * @returns {Promise<string>} AI response (JSON string)
+   */
+  async matchAttributes(prompt, language = 'ar') {
+    try {
+      console.log('🤖 [AI-MATCH-ATTR] Matching attributes with AI...');
+
+      const { systemPrompt, dataPrompt } = prompt;
+      const fullPrompt = `${systemPrompt}\n\n${dataPrompt}`;
+
+      let aiResponse;
+
+      if (this.provider === 'anthropic' && this.anthropic) {
+        console.log('🔵 [AI-MATCH-ATTR] Using Anthropic Claude...');
+
+        const response = await this.anthropic.messages.create({
+          model: this.anthropicModel,
+          max_tokens: 4096,
+          messages: [
+            {
+              role: 'user',
+              content: fullPrompt
+            }
+          ]
+        });
+
+        aiResponse = response.content[0].text;
+
+      } else if (this.openai) {
+        console.log('🟢 [AI-MATCH-ATTR] Using OpenAI GPT...');
+
+        const model = modelManager.getModel('extract_params', 'openai');
+
+        const response = await this.openai.chat.completions.create({
+          model: model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: dataPrompt }
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.3
+        });
+
+        aiResponse = response.choices[0].message.content;
+
+      } else {
+        throw new Error('No AI provider configured');
+      }
+
+      console.log('✅ [AI-MATCH-ATTR] AI matching complete');
+      console.log('📄 [AI-MATCH-ATTR] Response length:', aiResponse.length);
+
+      return aiResponse;
+
+    } catch (error) {
+      console.error('❌ [AI-MATCH-ATTR] Error:', error.message);
+      logger.error('Error in AI attribute matching:', error);
+      throw error;
+    }
   }
 }
 

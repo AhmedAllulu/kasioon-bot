@@ -13,7 +13,7 @@ class SearchParamsBuilder {
     const params = {
       language: analysisResult.raw?.language || options.language || 'ar',
       page: options.page || 1,
-      limit: options.limit || 10
+      limit: options.limit || 7 // ⚠️ أقصى 7 نتائج
     };
 
     // Category

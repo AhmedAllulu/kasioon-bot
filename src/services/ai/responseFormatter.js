@@ -117,8 +117,8 @@ class ResponseFormatter {
       message += results[0]._validation.warnings.join('\n') + '\n\n';
     }
 
-    // Format each result (max 10 to avoid too long messages)
-    results.slice(0, 10).forEach((item, index) => {
+    // Format each result (max 7 - للمزيد: kasioon.com أو التطبيق)
+    results.slice(0, 7).forEach((item, index) => {
       message += this.formatSingleListing(item, index + 1, isArabic);
     });
 
@@ -145,10 +145,29 @@ class ResponseFormatter {
   formatSingleListing(item, number, isArabic) {
     let listing = '';
 
-    // Match score badge (if available)
-    if (item.matchScore !== undefined) {
-      const badge = MatchScorer.getMatchBadge(item.matchScore, isArabic ? 'ar' : 'en');
-      listing += `${badge.emoji} *${item.matchScore}%* ${badge.text}\n`;
+    // Match score badge (if available) - check both matchScore and _attributeMatch
+    const matchData = item._attributeMatch || item.attributeMatch;
+    const matchScore = item.matchScore ?? matchData?.score;
+
+    if (matchScore !== undefined) {
+      const badge = MatchScorer.getMatchBadge(matchScore, isArabic ? 'ar' : 'en');
+      listing += `${badge.emoji} *${matchScore}%* ${badge.text}\n`;
+
+      // Show matched attributes if available
+      if (matchData?.matched && matchData.matched.length > 0) {
+        const matchedStr = matchData.matched.join(isArabic ? '، ' : ', ');
+        listing += isArabic
+          ? `   ✅ المواصفات المطابقة: ${matchedStr}\n`
+          : `   ✅ Matched: ${matchedStr}\n`;
+      }
+
+      // Show unmatched attributes if available (only for partial matches)
+      if (matchData?.unmatched && matchData.unmatched.length > 0 && matchData.type === 'partial') {
+        const unmatchedStr = matchData.unmatched.join(isArabic ? '، ' : ', ');
+        listing += isArabic
+          ? `   ⚠️ غير مطابق: ${unmatchedStr}\n`
+          : `   ⚠️ Unmatched: ${unmatchedStr}\n`;
+      }
     }
 
     // Number and title

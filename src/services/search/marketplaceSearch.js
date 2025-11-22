@@ -88,10 +88,8 @@ class MarketplaceSearchService {
       const cachedResults = await cache.get(cacheKey);
       
       if (cachedResults) {
-        console.log('✅ [SEARCH] Cache hit! Returning cached results');
         logger.info('Returning cached search results');
         const parsed = JSON.parse(cachedResults);
-        console.log('📊 [SEARCH] Cached results count:', parsed.length);
         return parsed;
       }
       
@@ -239,46 +237,9 @@ class MarketplaceSearchService {
       // Response format: { success: true, data: { listings: [...], pagination: {...} } }
       const listings = response.data?.data?.listings || [];
       const pagination = response.data?.data?.pagination || {};
-      
-      console.log('📊 [SEARCH] Results extracted:', listings.length, 'listings');
-      console.log('📄 [SEARCH] Pagination:', pagination);
-
-      // DEBUG: Log raw listings data for analysis
-      if (listings.length > 0) {
-        console.log('\n🔍 [DEBUG] ========== RAW LISTINGS DATA ==========');
-        console.log('📋 [DEBUG] Total listings:', listings.length);
-        console.log('📦 [DEBUG] Full listings array:', JSON.stringify(listings, null, 2));
-        
-        // Log structure of first listing as sample
-        if (listings[0]) {
-          console.log('\n📄 [DEBUG] ========== SAMPLE LISTING STRUCTURE ==========');
-          console.log('🔍 [DEBUG] First listing (sample):', JSON.stringify(listings[0], null, 2));
-          console.log('📋 [DEBUG] First listing keys:', Object.keys(listings[0]));
-          
-          // Log nested structures
-          if (listings[0].attributes) {
-            console.log('🔧 [DEBUG] First listing attributes:', JSON.stringify(listings[0].attributes, null, 2));
-          }
-          if (listings[0].location) {
-            console.log('📍 [DEBUG] First listing location:', JSON.stringify(listings[0].location, null, 2));
-          }
-          if (listings[0].category) {
-            console.log('📂 [DEBUG] First listing category:', JSON.stringify(listings[0].category, null, 2));
-          }
-          if (listings[0].images) {
-            console.log('🖼️  [DEBUG] First listing images:', JSON.stringify(listings[0].images, null, 2));
-          }
-          console.log('🔍 [DEBUG] =========================================\n');
-        }
-        console.log('🔍 [DEBUG] =========================================\n');
-      } else {
-        console.log('⚠️  [DEBUG] No listings in response');
-      }
 
       // Cache results for 5 minutes
-      console.log('💾 [SEARCH] Caching results...');
       await cache.set(cacheKey, JSON.stringify(listings), 300);
-      console.log('✅ [SEARCH] Results cached for 5 minutes');
 
       logger.info(`Found ${listings.length} listings`);
       console.log('✅ [SEARCH] Search complete!');
@@ -879,7 +840,6 @@ class MarketplaceSearchService {
             count: results.length,
             listings: results.slice(0, 5)
           });
-          console.log(`✅ [SUGGESTIONS] Found ${results.length} results without location filter`);
         }
       }
 
@@ -912,7 +872,6 @@ class MarketplaceSearchService {
                 count: results.length,
                 listings: results.slice(0, 5)
               });
-              console.log(`✅ [SUGGESTIONS] Found ${results.length} results in sibling category: ${sibling.slug}`);
               break; // Found results, stop trying siblings
             }
           }
@@ -963,7 +922,6 @@ class MarketplaceSearchService {
                 count: results.length,
                 listings: results.slice(0, 5)
               });
-              console.log(`✅ [SUGGESTIONS] Found ${results.length} results in sibling + all locations`);
               break;
             }
           }
@@ -1022,14 +980,11 @@ class MarketplaceSearchService {
         const results = await this.search(strategy.params);
 
         if (results && results.length > 0) {
-          console.log(`✅ [SMART-SEARCH] Strategy "${strategy.name}" returned ${results.length} results`);
           allResults = results;
           usedStrategy = strategy.name;
           fallbackMessage = strategy.fallbackMessage || null;
           break; // Found results, stop trying
         }
-
-        console.log(`⚠️ [SMART-SEARCH] Strategy "${strategy.name}" returned 0 results`);
       } catch (error) {
         console.error(`❌ [SMART-SEARCH] Strategy "${strategy.name}" failed:`, error.message);
       }
@@ -1416,6 +1371,521 @@ class MarketplaceSearchService {
   }
 
   // ==================== END NEW METHODS ====================
+
+  // ==================== INTELLIGENT SEARCH WITH KEYWORD EXPANSION ====================
+
+  /**
+   * 🆕 Intelligent search with keyword expansion and fallback
+   * المنطق الرئيسي: البحث بالكلمات الموسعة أولاً، ثم النتائج المشابهة إذا لم نجد شيء
+   *
+   * @param {Object} aiResponse - AI response with expanded keywords
+   * @returns {Promise<Object>} Search results with metadata
+   */
+  async intelligentSearch(aiResponse) {
+    try {
+      console.log('🧠 [INTELLIGENT-SEARCH] Starting intelligent search...');
+      console.log('📥 [INTELLIGENT-SEARCH] AI Response:', JSON.stringify(aiResponse, null, 2));
+
+      const {
+        mainKeyword,
+        expandedKeywords = [],
+        suggestedCategories = [],
+        location,
+        city,
+        transactionType
+      } = aiResponse;
+
+      // ✅ NEW LOGIC: Category search FIRST if categories are suggested
+      // هذا يضمن أن البحث عن "سيارة" يجد سيارات وليس فيلات تذكر السيارة في الوصف!
+
+      // Step 1: If categories are suggested, search by category FIRST (more precise)
+      if (suggestedCategories && suggestedCategories.length > 0) {
+        console.log('🎯 [INTELLIGENT-SEARCH] Step 1: Searching by CATEGORY first (more precise)...');
+        console.log('📂 [INTELLIGENT-SEARCH] Suggested categories:', suggestedCategories);
+
+        const categoryResults = await this.searchByCategories(
+          suggestedCategories,
+          location || city,
+          transactionType
+        );
+
+        if (categoryResults && categoryResults.length > 0) {
+          console.log(`✅ [INTELLIGENT-SEARCH] Found ${categoryResults.length} results by category!`);
+          return {
+            success: true,
+            results: categoryResults,
+            searchType: 'category',
+            usedKeywords: expandedKeywords,
+            matchedCategories: suggestedCategories
+          };
+        }
+
+        console.log('⚠️ [INTELLIGENT-SEARCH] No results from category search, trying keyword search...');
+      }
+
+      // Step 2: Search with expanded keywords (fallback or when no categories)
+      console.log('🔍 [INTELLIGENT-SEARCH] Step 2: Searching with expanded keywords...');
+      const results = await this.searchWithExpandedKeywords(
+        expandedKeywords,
+        location || city,
+        transactionType
+      );
+
+      // Step 3: If results found, filter by category if possible
+      if (results && results.length > 0) {
+        // If we have suggested categories, filter results to match
+        if (suggestedCategories && suggestedCategories.length > 0) {
+          const filteredResults = this.filterResultsByCategory(results, suggestedCategories);
+
+          if (filteredResults.length > 0) {
+            console.log(`✅ [INTELLIGENT-SEARCH] Filtered to ${filteredResults.length} results matching category`);
+            return {
+              success: true,
+              results: filteredResults,
+              searchType: 'keyword_filtered',
+              usedKeywords: expandedKeywords,
+              matchedCategories: suggestedCategories
+            };
+          }
+        }
+
+        // Return unfiltered results as last resort
+        return {
+          success: true,
+          results: results,
+          searchType: 'keyword',
+          usedKeywords: expandedKeywords
+        };
+      }
+
+      // Step 4: No results - Use fallback with category matching
+      console.log('🔄 [INTELLIGENT-SEARCH] Step 3: Trying fallback search...');
+      return await this.fallbackSearch(
+        suggestedCategories,
+        expandedKeywords,
+        location || city
+      );
+
+    } catch (error) {
+      console.error('❌ [INTELLIGENT-SEARCH] Error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 🆕 Search with expanded keywords (no category filter)
+   * البحث باستخدام الكلمات الموسعة بدون تصفية الفئات
+   *
+   * ⚠️ ENHANCED: يبحث عن كل كلمة لوحدها ثم يدمج النتائج
+   *
+   * @param {Array} keywords - Array of expanded keywords
+   * @param {string} location - Location filter
+   * @param {string} transactionType - Transaction type filter
+   * @returns {Promise<Array>} Search results
+   */
+  async searchWithExpandedKeywords(keywords, location, transactionType) {
+    try {
+      console.log('🔍 [KEYWORD-SEARCH] Searching with keywords:', keywords);
+
+      if (!keywords || keywords.length === 0) {
+        console.log('⚠️  [KEYWORD-SEARCH] No keywords provided');
+        return [];
+      }
+
+      // ✅ جديد: نبحث عن كل كلمة لوحدها، مش كلهم مع بعض!
+      const allResults = [];
+      const seenIds = new Set(); // تجنب التكرار
+
+      for (const keyword of keywords.slice(0, 3)) { // أول 3 كلمات فقط
+        console.log(`🔍 [KEYWORD-SEARCH] Searching for: "${keyword}"`);
+
+        const searchParams = {
+          keywords: keyword, // ✅ كلمة واحدة فقط
+          limit: 7 // ⚠️ أقصى 7 نتائج - للمزيد: kasioon.com أو التطبيق
+        };
+
+        // Add location if provided
+        if (location) {
+          searchParams.city = location;
+        }
+
+        // Add transaction type if provided
+        if (transactionType) {
+          searchParams.transactionType = transactionType;
+        }
+
+        try {
+          const results = await this.search(searchParams);
+          console.log(`   Found ${results.length} results for "${keyword}"`);
+
+          // أضف النتائج الجديدة فقط (تجنب التكرار)
+          for (const result of results) {
+            if (!seenIds.has(result.id)) {
+              seenIds.add(result.id);
+              allResults.push(result);
+            }
+          }
+
+          // إذا وصلنا لـ 20 نتيجة، نوقف
+          if (allResults.length >= 20) {
+            break;
+          }
+        } catch (error) {
+          console.error(`   ❌ Error searching for "${keyword}":`, error.message);
+        }
+      }
+
+      return allResults;
+
+    } catch (error) {
+      console.error('❌ [KEYWORD-SEARCH] Error:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * 🆕 Fallback search using category matching with categoryKeywords.json
+   * البحث الاحتياطي باستخدام مطابقة الفئات مع ملف الكلمات المفتاحية
+   *
+   * @param {Array} suggestedCategories - AI-suggested category slugs
+   * @param {Array} keywords - Expanded keywords
+   * @param {string} location - Location filter
+   * @returns {Promise<Object>} Search results with metadata
+   */
+  async fallbackSearch(suggestedCategories, keywords, location) {
+    try {
+      console.log('🔄 [FALLBACK-SEARCH] Starting fallback search...');
+      console.log('📂 [FALLBACK-SEARCH] Suggested categories:', suggestedCategories);
+      console.log('🔑 [FALLBACK-SEARCH] Keywords:', keywords);
+
+      // Load category data files
+      const allCategories = require('../data/all-categories.json');
+      const categoryKeywords = require('../data/categoryKeywords.json');
+
+      console.log('✅ [FALLBACK-SEARCH] Loaded data files');
+
+      // Match AI-suggested categories with keywords from categoryKeywords.json
+      const matchedCategories = this.matchCategoriesIntelligently(
+        suggestedCategories,
+        keywords,
+        categoryKeywords,
+        allCategories
+      );
+
+      if (matchedCategories.length === 0) {
+        console.log('⚠️  [FALLBACK-SEARCH] No categories matched');
+        return {
+          success: true,
+          results: [],
+          searchType: 'no_results',
+          message: {
+            ar: 'عذراً، لم نجد أي نتائج تطابق بحثك. حاول استخدام كلمات مفتاحية أخرى.',
+            en: 'Sorry, no results found matching your search. Try using different keywords.'
+          }
+        };
+      }
+
+      console.log(`✅ [FALLBACK-SEARCH] Matched ${matchedCategories.length} categories`);
+
+      // Search in matched categories
+      const similarResults = await this.searchInCategories(
+        matchedCategories,
+        keywords,
+        location
+      );
+
+      return {
+        success: true,
+        results: similarResults,
+        searchType: 'similar',
+        matchedCategories: matchedCategories.map(c => ({
+          slug: c.slug,
+          name: c.name
+        }))
+      };
+
+    } catch (error) {
+      console.error('❌ [FALLBACK-SEARCH] Error:', error.message);
+      return {
+        success: false,
+        results: [],
+        searchType: 'error',
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 🆕 Match categories intelligently using categoryKeywords.json
+   * مطابقة الفئات بذكاء باستخدام ملف الكلمات المفتاحية
+   *
+   * @param {Array} suggestedSlugs - AI-suggested category slugs
+   * @param {Array} userKeywords - User's expanded keywords
+   * @param {Object} keywordMap - categoryKeywords.json mapping
+   * @param {Object} allCategories - all-categories.json data
+   * @returns {Array} Matched categories with details
+   */
+  matchCategoriesIntelligently(suggestedSlugs, userKeywords, keywordMap, allCategories) {
+    console.log('🎯 [CATEGORY-MATCH] Matching categories...');
+    const matches = [];
+
+    // Step 1: Match AI-suggested categories first
+    for (const slug of suggestedSlugs) {
+      if (keywordMap[slug]) {
+        const category = this.findCategoryBySlug(slug, allCategories);
+        if (category) {
+          matches.push({
+            slug: slug,
+            name: category.name,
+            keywords: keywordMap[slug],
+            source: 'ai_suggested'
+          });
+          console.log(`✅ [CATEGORY-MATCH] Matched AI-suggested category: ${slug}`);
+        }
+      }
+    }
+
+    // Step 2: If no AI matches, try keyword-based matching
+    if (matches.length === 0 && userKeywords && userKeywords.length > 0) {
+      console.log('🔍 [CATEGORY-MATCH] No AI matches, trying keyword-based matching...');
+
+      for (const [categorySlug, categoryKeywordList] of Object.entries(keywordMap)) {
+        // Check if any user keyword matches category keywords
+        const hasMatch = userKeywords.some(userKw =>
+          categoryKeywordList.some(catKw =>
+            catKw.toLowerCase().includes(userKw.toLowerCase()) ||
+            userKw.toLowerCase().includes(catKw.toLowerCase())
+          )
+        );
+
+        if (hasMatch) {
+          const category = this.findCategoryBySlug(categorySlug, allCategories);
+          if (category) {
+            matches.push({
+              slug: categorySlug,
+              name: category.name,
+              keywords: categoryKeywordList,
+              source: 'keyword_match'
+            });
+            console.log(`✅ [CATEGORY-MATCH] Matched by keywords: ${categorySlug}`);
+
+            // Limit to top 3 keyword matches
+            if (matches.length >= 3) break;
+          }
+        }
+      }
+    }
+
+    console.log(`🎯 [CATEGORY-MATCH] Total matches: ${matches.length}`);
+    return matches;
+  }
+
+  /**
+   * 🆕 Find category by slug in nested hierarchy
+   * البحث عن فئة حسب الـ slug في التسلسل الهرمي
+   *
+   * @param {string} slug - Category slug to find
+   * @param {Object} categoriesData - all-categories.json data
+   * @returns {Object|null} Category object or null
+   */
+  findCategoryBySlug(slug, categoriesData) {
+    // Navigate through the API response structure
+    const categories = categoriesData?.data?.categories || categoriesData?.categories || [];
+
+    const findRecursive = (cats, targetSlug) => {
+      for (const cat of cats) {
+        if (cat.slug === targetSlug) {
+          return cat;
+        }
+        if (cat.children && cat.children.length > 0) {
+          const found = findRecursive(cat.children, targetSlug);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    return findRecursive(categories, slug);
+  }
+
+  /**
+   * 🆕 Search in specific matched categories
+   * البحث في الفئات المطابقة المحددة
+   *
+   * @param {Array} matchedCategories - Matched categories from intelligent matching
+   * @param {Array} keywords - Search keywords
+   * @param {string} location - Location filter
+   * @returns {Promise<Array>} Combined search results
+   */
+  async searchInCategories(matchedCategories, keywords, location) {
+    console.log('🔍 [CATEGORY-SEARCH] Searching in matched categories...');
+    const allResults = [];
+
+    for (const category of matchedCategories) {
+      console.log(`📂 [CATEGORY-SEARCH] Searching in category: ${category.slug}`);
+
+      // ✅ Build search params for this category
+      // ⚠️ NO KEYWORDS! Category is already specific enough
+      // لما تبحث عن طريق الفئات لا تضع الكلمات المفتاحية - الفئة كافية!
+      const searchParams = {
+        categorySlug: category.slug,
+        // ❌ Don't include keywords - if category is "cars", all listings are already cars!
+        limit: 7 // ⚠️ أقصى 7 نتائج - للمزيد: kasioon.com أو التطبيق
+      };
+
+      // Add location if provided
+      if (location) {
+        searchParams.city = location;
+      }
+
+      try {
+        const results = await this.search(searchParams);
+
+        // Tag results with category info for display
+        const taggedResults = results.map(result => ({
+          ...result,
+          _matchedCategory: {
+            slug: category.slug,
+            name: category.name,
+            source: category.source
+          }
+        }));
+
+        allResults.push(...taggedResults);
+
+        // Stop if we have enough results
+        if (allResults.length >= 20) {
+          break;
+        }
+      } catch (error) {
+        console.error(`❌ [CATEGORY-SEARCH] Error searching in ${category.slug}:`, error.message);
+      }
+    }
+
+    return allResults;
+  }
+
+  /**
+   * 🆕 Search by categories (without keywords)
+   * البحث عبر الفئات مباشرة - أكثر دقة من البحث بالكلمات
+   *
+   * @param {Array} categorySlugs - Array of category slugs
+   * @param {string} location - Location filter
+   * @param {string} transactionType - Transaction type filter
+   * @returns {Promise<Array>} Search results
+   */
+  async searchByCategories(categorySlugs, location, transactionType) {
+    try {
+      console.log('🎯 [CATEGORY-SEARCH] Searching by categories:', categorySlugs);
+
+      if (!categorySlugs || categorySlugs.length === 0) {
+        console.log('⚠️ [CATEGORY-SEARCH] No categories provided');
+        return [];
+      }
+
+      const allResults = [];
+      const seenIds = new Set();
+
+      for (const categorySlug of categorySlugs.slice(0, 2)) { // أول فئتين فقط
+        console.log(`📂 [CATEGORY-SEARCH] Searching in: ${categorySlug}`);
+
+        const searchParams = {
+          categorySlug: categorySlug,
+          limit: 7 // ⚠️ أقصى 7 نتائج
+        };
+
+        if (location) {
+          searchParams.city = location;
+        }
+
+        if (transactionType) {
+          if (transactionType.includes('بيع') || transactionType.toLowerCase().includes('sale')) {
+            searchParams.transactionTypeSlug = 'for-sale';
+          } else if (transactionType.includes('إيجار') || transactionType.includes('أجار') || transactionType.toLowerCase().includes('rent')) {
+            searchParams.transactionTypeSlug = 'for-rent';
+          }
+        }
+
+        try {
+          const results = await this.search(searchParams);
+
+          for (const result of results) {
+            if (!seenIds.has(result.id)) {
+              seenIds.add(result.id);
+              allResults.push({
+                ...result,
+                _searchedByCategory: categorySlug
+              });
+            }
+          }
+
+          console.log(`✅ [CATEGORY-SEARCH] Found ${results.length} in ${categorySlug}`);
+
+        } catch (error) {
+          console.error(`❌ [CATEGORY-SEARCH] Error in ${categorySlug}:`, error.message);
+        }
+      }
+
+      return allResults;
+
+    } catch (error) {
+      console.error('❌ [CATEGORY-SEARCH] Error:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * 🆕 Filter results by category
+   * تصفية نتائج البحث بالكلمات حسب الفئة المقترحة
+   *
+   * @param {Array} results - Search results
+   * @param {Array} categorySlugs - Array of category slugs to filter by
+   * @returns {Array} Filtered results
+   */
+  filterResultsByCategory(results, categorySlugs) {
+    if (!results || results.length === 0) return [];
+    if (!categorySlugs || categorySlugs.length === 0) return results;
+
+    console.log(`🔍 [FILTER] Filtering ${results.length} results by categories:`, categorySlugs);
+
+    const filtered = results.filter(result => {
+      // Check if result's category matches any of the suggested categories
+      const resultCategory = result.category?.slug || result.categorySlug || '';
+      const resultCategoryName = result.category?.name || '';
+
+      // Check for match
+      for (const targetSlug of categorySlugs) {
+        // Exact slug match
+        if (resultCategory === targetSlug) return true;
+
+        // Partial slug match (e.g., "cars" matches "cars-for-sale")
+        if (resultCategory.includes(targetSlug) || targetSlug.includes(resultCategory)) return true;
+
+        // Check parent category
+        if (result.category?.parent?.slug === targetSlug) return true;
+
+        // Check if target is a root category and result is a subcategory
+        // vehicles → cars, motorcycles, etc.
+        const categoryMappings = {
+          'vehicles': ['cars', 'motorcycles', 'trucks', 'buses', 'boats', 'vehicle-parts'],
+          'real-estate': ['apartments', 'houses', 'lands', 'commercial', 'farms', 'villas'],
+          'electronics': ['phones', 'computers', 'laptops', 'tablets', 'gaming', 'tvs', 'cameras']
+        };
+
+        const subcategories = categoryMappings[targetSlug] || [];
+        for (const sub of subcategories) {
+          if (resultCategory.includes(sub)) return true;
+        }
+      }
+
+      return false;
+    });
+
+    console.log(`✅ [FILTER] Filtered to ${filtered.length} results`);
+    return filtered;
+  }
+
+  // ==================== END INTELLIGENT SEARCH ====================
 }
 
 module.exports = new MarketplaceSearchService();

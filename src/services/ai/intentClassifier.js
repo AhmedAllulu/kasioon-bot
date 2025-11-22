@@ -343,6 +343,8 @@ class IntentClassifier {
   /**
    * تحقق من نية البحث
    * Check for search intent
+   *
+   * 🆕 ENHANCED: أنماط البحث الواضحة (مثل "بدي"، "ابحث") كافية لوحدها
    */
   checkSearch(text, normalizedText) {
     let score = 0;
@@ -354,43 +356,48 @@ class IntentClassifier {
       hasSearchIntent: false,
     };
 
-    // 1. تحقق من أنماط البحث الواضحة (+0.3)
-    if (this.hasSearchPattern(text)) {
-      score += 0.3;
+    // 1. تحقق من أنماط البحث الواضحة
+    const hasExplicitSearchIntent = this.hasSearchPattern(text);
+    if (hasExplicitSearchIntent) {
       extractedInfo.hasSearchIntent = true;
+
+      // ✅ إذا استخدم كلمات بحث واضحة مثل "بدي"، "ابحث"، "أريد"
+      // هذا كافي لوحده لاعتبارها نية بحث (score عالي مباشرة)
+      score += 0.7; // رفعنا من 0.3 إلى 0.7 لأن "بدي" واضحة جداً
     }
 
-    // 2. تحقق من كلمات المنتجات (+0.3)
+    // 2. تحقق من كلمات المنتجات (اختياري - يعزز الثقة فقط)
     if (this.hasProductKeyword(normalizedText)) {
-      score += 0.3;
+      score += 0.2; // خفضنا من 0.3 إلى 0.2 لأنها مش ضرورية
       extractedInfo.hasProduct = true;
     }
 
-    // 3. تحقق من كلمات الموقع (+0.15)
+    // 3. تحقق من كلمات الموقع (+0.1)
     if (this.hasLocationIndicator(text)) {
-      score += 0.15;
+      score += 0.1;
       extractedInfo.hasLocation = true;
     }
 
-    // 4. تحقق من كلمات السعر (+0.1)
+    // 4. تحقق من كلمات السعر (+0.05)
     if (this.hasPriceKeyword(normalizedText)) {
-      score += 0.1;
+      score += 0.05;
       extractedInfo.hasPrice = true;
     }
 
-    // 5. تحقق من كلمات البيع/الشراء (+0.15)
+    // 5. تحقق من كلمات البيع/الشراء (+0.1)
     if (this.hasTransactionKeyword(normalizedText)) {
-      score += 0.15;
+      score += 0.1;
       extractedInfo.hasTransaction = true;
     }
 
-    // 6. طول الرسالة (+0.1 if > 10 chars)
-    if (text.length > 10) {
-      score += 0.1;
+    // 6. طول الرسالة (+0.05 if > 5 chars)
+    if (text.length > 5) {
+      score += 0.05;
     }
 
-    // إذا كان المجموع أكبر من 0.4 فهي نية بحث
-    if (score >= 0.4) {
+    // ✅ إذا كان المجموع >= 0.5 فهي نية بحث
+    // لاحظ: "بدي" لوحدها = 0.7 + 0.05 = 0.75 → نية بحث واضحة!
+    if (score >= 0.5) {
       return {
         isMatch: true,
         confidence: Math.min(score, 1),

@@ -233,7 +233,7 @@ class ConversationContextManager {
     const context = this.getContext(userId);
 
     context.lastSearchParams = searchParams;
-    context.lastSearchResults = results.slice(0, 10); // احفظ أول 10 نتائج فقط
+    context.lastSearchResults = results.slice(0, 7); // ⚠️ أقصى 7 نتائج
     context.lastSearchTimestamp = Date.now();
     context.searchCount = (context.searchCount || 0) + 1;
 
