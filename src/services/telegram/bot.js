@@ -273,6 +273,41 @@ Send a voice message and I'll understand
           await ctx.reply(feedbackResponse);
           return;
 
+        case intentClassifier.intentTypes.COMPLAINT:
+          const complaintMessage = language === 'ar'
+            ? '😔 *نأسف لوجود مشكلة*\n\nنحن نعمل باستمرار على تحسين الخدمة. يمكنك:\n\n• 🔄 إعادة المحاولة بصيغة مختلفة\n• 📝 وصف المشكلة بالتفصيل\n• 📞 التواصل مع الدعم الفني\n\nكيف يمكنني مساعدتك؟'
+            : '😔 *Sorry to hear about the issue*\n\nWe\'re constantly working to improve our service. You can:\n\n• 🔄 Try again with different wording\n• 📝 Describe the problem in detail\n• 📞 Contact technical support\n\nHow can I help you?';
+          await ctx.reply(complaintMessage, { parse_mode: 'Markdown' });
+          return;
+
+        case intentClassifier.intentTypes.CONTACT:
+          const contactMessage = language === 'ar'
+            ? '📞 *معلومات التواصل*\n\nللتواصل مع فريق الدعم:\n\n• 💬 يمكنك التواصل مباشرة من خلال هذا البوت\n• 📧 البريد: support@kasioon.com\n• 🌐 الموقع: www.kasioon.com\n\nأو يمكنني مساعدتك مباشرة. ما الذي تحتاجه؟'
+            : '📞 *Contact Information*\n\nTo contact our support team:\n\n• 💬 You can reach out directly through this bot\n• 📧 Email: support@kasioon.com\n• 🌐 Website: www.kasioon.com\n\nOr I can help you directly. What do you need?';
+          await ctx.reply(contactMessage, { parse_mode: 'Markdown' });
+          return;
+
+        case intentClassifier.intentTypes.PRODUCT_INFO:
+          const productInfoMessage = language === 'ar'
+            ? '📋 *معلومات المنتج*\n\nيمكنني مساعدتك في الحصول على معلومات تفصيلية عن أي منتج!\n\nلعرض المعلومات، ابحث عن المنتج أولاً ثم اختر النتيجة التي تريدها.\n\n💡 *جرب البحث الآن:*\nمثال: "سيارة تويوتا 2020"'
+            : '📋 *Product Information*\n\nI can help you get detailed information about any product!\n\nTo view details, search for the product first, then select the result you want.\n\n💡 *Try searching now:*\nExample: "Toyota car 2020"';
+          await ctx.reply(productInfoMessage, { parse_mode: 'Markdown' });
+          return;
+
+        case intentClassifier.intentTypes.COMPARISON:
+          const comparisonMessage = language === 'ar'
+            ? '⚖️ *مقارنة المنتجات*\n\nلمقارنة منتجات مختلفة:\n\n1️⃣ ابحث عن المنتج الأول\n2️⃣ ثم ابحث عن المنتج الثاني\n3️⃣ قارن بين المواصفات والأسعار\n\n💡 *مثال:*\n"سيارة تويوتا"\nثم "سيارة هونداي"\n\nجرب البحث الآن!'
+            : '⚖️ *Product Comparison*\n\nTo compare different products:\n\n1️⃣ Search for the first product\n2️⃣ Then search for the second product\n3️⃣ Compare specs and prices\n\n💡 *Example:*\n"Toyota car"\nthen "Hyundai car"\n\nTry searching now!';
+          await ctx.reply(comparisonMessage, { parse_mode: 'Markdown' });
+          return;
+
+        case intentClassifier.intentTypes.AVAILABILITY:
+          const availabilityMessage = language === 'ar'
+            ? '🔍 *التحقق من التوفر*\n\nلمعرفة إذا كان منتج معين متوفراً:\n\nابحث عن المنتج مع تحديد المدينة والمواصفات.\n\n💡 *مثال:*\n• "موبايل ايفون 13 في دمشق"\n• "شقة 3 غرف في حلب"\n\nما الذي تبحث عنه؟'
+            : '🔍 *Check Availability*\n\nTo check if a specific product is available:\n\nSearch for the product with location and specs.\n\n💡 *Example:*\n• "iPhone 13 in Damascus"\n• "3 bedroom apartment in Aleppo"\n\nWhat are you looking for?';
+          await ctx.reply(availabilityMessage, { parse_mode: 'Markdown' });
+          return;
+
         case intentClassifier.intentTypes.UNCLEAR:
           // Send clarification question
           const clarificationMsg = intentResult.clarificationQuestion ||

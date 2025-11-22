@@ -21,6 +21,11 @@ const INTENT_TYPES = {
   FEEDBACK: 'feedback',           // ملاحظات (إيجابية/سلبية)
   GOODBYE: 'goodbye',             // وداع
   CONFIRMATION: 'confirmation',   // تأكيد (نعم/لا)
+  PRODUCT_INFO: 'productInfo',    // طلب معلومات عن منتج
+  COMPARISON: 'comparison',       // مقارنة بين منتجات
+  AVAILABILITY: 'availability',   // الاستفسار عن التوفر
+  COMPLAINT: 'complaint',         // شكوى أو مشكلة
+  CONTACT: 'contact',             // طلب التواصل والدعم
   UNCLEAR: 'unclear',             // غير واضح
 };
 
@@ -84,7 +89,25 @@ class IntentClassifier {
         };
       }
 
-      // 5. تحقق من الملاحظات
+      // 5. تحقق من الشكاوى والمشاكل
+      const complaintResult = this.checkComplaint(text);
+      if (complaintResult.isMatch) {
+        return {
+          intent: INTENT_TYPES.COMPLAINT,
+          confidence: complaintResult.confidence,
+        };
+      }
+
+      // 6. تحقق من طلب التواصل والدعم
+      const contactResult = this.checkContact(text);
+      if (contactResult.isMatch) {
+        return {
+          intent: INTENT_TYPES.CONTACT,
+          confidence: contactResult.confidence,
+        };
+      }
+
+      // 7. تحقق من الملاحظات
       const feedbackResult = this.checkFeedback(text);
       if (feedbackResult.isMatch) {
         return {
@@ -94,7 +117,34 @@ class IntentClassifier {
         };
       }
 
-      // 6. تحقق من تحسين البحث (Follow-up)
+      // 8. تحقق من المقارنة بين المنتجات
+      const comparisonResult = this.checkComparison(text);
+      if (comparisonResult.isMatch) {
+        return {
+          intent: INTENT_TYPES.COMPARISON,
+          confidence: comparisonResult.confidence,
+        };
+      }
+
+      // 9. تحقق من طلب معلومات عن منتج
+      const productInfoResult = this.checkProductInfo(text);
+      if (productInfoResult.isMatch) {
+        return {
+          intent: INTENT_TYPES.PRODUCT_INFO,
+          confidence: productInfoResult.confidence,
+        };
+      }
+
+      // 10. تحقق من الاستفسار عن التوفر
+      const availabilityResult = this.checkAvailability(text);
+      if (availabilityResult.isMatch) {
+        return {
+          intent: INTENT_TYPES.AVAILABILITY,
+          confidence: availabilityResult.confidence,
+        };
+      }
+
+      // 11. تحقق من تحسين البحث (Follow-up)
       // يحتاج وجود سياق محادثة سابقة
       if (context.lastIntent === INTENT_TYPES.SEARCH) {
         const refinementResult = this.checkRefinement(text, context);
@@ -107,7 +157,7 @@ class IntentClassifier {
         }
       }
 
-      // 7. تحقق من نية البحث
+      // 12. تحقق من نية البحث
       const searchResult = this.checkSearch(text, normalizedText);
       if (searchResult.isMatch) {
         // تحقق من جودة البحث
@@ -128,7 +178,7 @@ class IntentClassifier {
         };
       }
 
-      // 8. افتراضي: غير واضح
+      // 13. افتراضي: غير واضح
       return {
         intent: INTENT_TYPES.UNCLEAR,
         confidence: 0.2,
@@ -504,6 +554,101 @@ class IntentClassifier {
       }
       return 'Could you clarify your request? For example:\n• "car for sale in Damascus"\n• "apartment for rent in Aleppo"';
     }
+  }
+
+  /**
+   * تحقق من طلب معلومات عن منتج
+   * Check for product information request intent
+   */
+  checkProductInfo(text) {
+    const { patterns: productInfoPatterns } = this.patterns.productInfo;
+
+    for (const pattern of productInfoPatterns) {
+      if (pattern.test(text)) {
+        return {
+          isMatch: true,
+          confidence: 0.88,
+        };
+      }
+    }
+
+    return { isMatch: false };
+  }
+
+  /**
+   * تحقق من المقارنة بين المنتجات
+   * Check for comparison intent
+   */
+  checkComparison(text) {
+    const { patterns: comparisonPatterns } = this.patterns.comparison;
+
+    for (const pattern of comparisonPatterns) {
+      if (pattern.test(text)) {
+        return {
+          isMatch: true,
+          confidence: 0.92,
+        };
+      }
+    }
+
+    return { isMatch: false };
+  }
+
+  /**
+   * تحقق من الاستفسار عن التوفر
+   * Check for availability inquiry intent
+   */
+  checkAvailability(text) {
+    const { patterns: availabilityPatterns } = this.patterns.availability;
+
+    for (const pattern of availabilityPatterns) {
+      if (pattern.test(text)) {
+        return {
+          isMatch: true,
+          confidence: 0.87,
+        };
+      }
+    }
+
+    return { isMatch: false };
+  }
+
+  /**
+   * تحقق من الشكاوى والمشاكل
+   * Check for complaint intent
+   */
+  checkComplaint(text) {
+    const { patterns: complaintPatterns } = this.patterns.complaint;
+
+    for (const pattern of complaintPatterns) {
+      if (pattern.test(text)) {
+        return {
+          isMatch: true,
+          confidence: 0.9,
+        };
+      }
+    }
+
+    return { isMatch: false };
+  }
+
+  /**
+   * تحقق من طلب التواصل والدعم
+   * Check for contact/support request intent
+   */
+  checkContact(text) {
+    const { patterns: contactPatterns } = this.patterns.contact;
+
+    for (const pattern of contactPatterns) {
+      if (pattern.test(text)) {
+        return {
+          isMatch: true,
+          confidence: 0.9,
+        };
+      }
+    }
+
+    return { isMatch: false };
   }
 
   /**
