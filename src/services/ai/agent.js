@@ -368,7 +368,21 @@ SPECIFIC CATEGORIZATION RULES (USE LEAF CATEGORIES):
 - شاحنة / تريلا → category: "trucks"
 - باص / حافلة → category: "buses"
 
-3. SERVICES → category: "services"
+3. ELECTRONICS SUBCATEGORIES (use specific, not "electronics"):
+- لابتوب / حاسوب محمول → category: "laptops"
+- موبايل / جوال / هاتف → category: "mobiles"
+- تابلت / آيباد → category: "tablets"
+- كمبيوتر / حاسوب → category: "computers"
+
+4. SERVICES SUBCATEGORIES (use specific, not "services"):
+- برمجة / تطوير مواقع / شركة برمجة → category: "web-development-programming"
+- تسويق / سوشيال ميديا / إعلانات → category: "digital-marketing-social-media"
+- استشارات / دراسة جدوى → category: "business-consulting-strategy"
+- محاماة / قانون → category: "legal-professional-services"
+- تصميم داخلي / ديكور → category: "interior-design-decoration"
+- تصميم جرافيك → category: "graphic-design-visual-services"
+- تدريب / دورات / تعليم → category: "training-education-services"
+- دعم فني / IT → category: "technology-it-support"
 
 For vehicles specifically, also extract:
 - carBrand: Car brand/make (e.g., Toyota, BMW, Mercedes)
@@ -398,10 +412,10 @@ User: "فيلا في اللاذقية"
 Response: {"city": "Latakia", "category": "villas", "keywords": "فيلا"}
 
 User: "بدي شركة برمجة في دمشق"
-Response: {"city": "Damascus", "category": "services", "keywords": "شركة برمجة"}
+Response: {"city": "Damascus", "category": "web-development-programming", "keywords": "شركة برمجة"}
 
 User: "لابتوب مستعمل"
-Response: {"category": "electronics", "keywords": "لابتوب", "condition": "used"}
+Response: {"category": "laptops", "keywords": "لابتوب", "condition": "used"}
 
 User: "دراجة نارية في حمص"
 Response: {"city": "Homs", "category": "motorcycles", "keywords": "دراجة نارية"}`;
@@ -1086,7 +1100,7 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
 
       // Calculate match scores for all results
       const scoredResults = results.map(result => {
-        const { matchScore, matchDetails } = MatchScorer.calculateMatchScore(
+        const scoreResult = MatchScorer.calculateMatchScore(
           result,
           userParams,
           userMessage,
@@ -1095,10 +1109,21 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
 
         return {
           ...result,
-          matchScore,
-          matchDetails
+          matchScore: scoreResult.matchScore,
+          matchDetails: scoreResult.matchDetails,
+          excluded: scoreResult.excluded,
+          excludeReason: scoreResult.excludeReason
         };
       });
+
+      // Log category-excluded results for debugging
+      const excludedResults = scoredResults.filter(r => r.excluded);
+      if (excludedResults.length > 0) {
+        console.log(`🚫 [AI-FILTER] Excluded ${excludedResults.length} results due to category mismatch`);
+        excludedResults.slice(0, 3).forEach(r => {
+          console.log(`   ❌ "${r.title}" (category: ${r.category_slug || r.category?.slug})`);
+        });
+      }
 
       // Sort by match score (descending)
       const sortedResults = MatchScorer.sortByMatchScore(scoredResults);

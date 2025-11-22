@@ -1,0 +1,3604 @@
+{
+  "houses": [
+    "بيت",
+    "بيوت",
+    "منزل",
+    "منازل",
+    "دار",
+    "دور",
+    "سكن",
+    "مسكن",
+    "house",
+    "houses",
+    "home",
+    "homes",
+    "residence",
+    "dwelling",
+    "accommodation",
+    "duplex",
+    "triplex",
+    "townhouse",
+    "compound"
+  ],
+  "apartments": [
+    "شقة",
+    "شقق",
+    "استديو",
+    "ستوديو",
+    "روف",
+    "رووف",
+    "بنتهاوس",
+    "دوبلكس",
+    "apartment",
+    "apartments",
+    "flat",
+    "flats",
+    "studio",
+    "studios",
+    "penthouse",
+    "loft",
+    "unit",
+    "condo"
+  ],
+  "villas": [
+    "فيلا",
+    "فيلات",
+    "فلل",
+    "قصر",
+    "قصور",
+    "villa",
+    "villas",
+    "mansion",
+    "mansions",
+    "palace"
+  ],
+  "lands": [
+    "أرض",
+    "ارض",
+    "أراضي",
+    "اراضي",
+    "قطعة أرض",
+    "مخطط",
+    "land",
+    "lands",
+    "plot",
+    "plots",
+    "terrain",
+    "lot",
+    "ground"
+  ],
+  "agricultural-lands": [
+    "أرض زراعية",
+    "ارض زراعية",
+    "زراعي",
+    "زراعية",
+    "مزرعة",
+    "مزارع",
+    "بستان",
+    "agricultural",
+    "farm",
+    "farmland",
+    "agriculture",
+    "orchard"
+  ],
+  "commercial-lands": [
+    "أرض تجارية",
+    "ارض تجارية",
+    "تجاري",
+    "تجارية",
+    "استثماري",
+    "commercial",
+    "commercial land",
+    "investment land"
+  ],
+  "offices": [
+    "مكتب",
+    "مكاتب",
+    "عيادة",
+    "مقر شركة",
+    "office",
+    "offices",
+    "clinic",
+    "headquarters",
+    "workspace",
+    "co-working"
+  ],
+  "shops": [
+    "محل",
+    "محلات",
+    "دكان",
+    "دكاكين",
+    "معرض",
+    "معارض",
+    "بوتيك",
+    "shop",
+    "shops",
+    "store",
+    "stores",
+    "retail",
+    "outlet",
+    "showroom",
+    "boutique"
+  ],
+  "warehouses": [
+    "مستودع",
+    "مستودعات",
+    "مخزن",
+    "مخازن",
+    "هنجر",
+    "هناجر",
+    "warehouse",
+    "warehouses",
+    "storage",
+    "storehouse",
+    "depot",
+    "hangar"
+  ],
+  "cars": [
+    "سيارة",
+    "سيارات",
+    "عربية",
+    "عربيات",
+    "مركبة",
+    "مركبات",
+    "car",
+    "cars",
+    "automobile",
+    "auto",
+    "vehicle",
+    "vehicles",
+    "sedan",
+    "suv",
+    "coupe",
+    "convertible"
+  ],
+  "motorcycles": [
+    "دراجة نارية",
+    "دراجات نارية",
+    "موتور",
+    "موتوسيكل",
+    "دباب",
+    "سيكل",
+    "فيسبا",
+    "سكوتر",
+    "motorcycle",
+    "motorcycles",
+    "motorbike",
+    "bike",
+    "bikes",
+    "scooter",
+    "moped"
+  ],
+  "trucks": [
+    "شاحنة",
+    "شاحنات",
+    "تريلا",
+    "تريلات",
+    "شاحنه",
+    "نقل",
+    "قاطرة",
+    "truck",
+    "trucks",
+    "lorry",
+    "trailer",
+    "pickup",
+    "haulage",
+    "heavy truck"
+  ],
+  "buses": [
+    "باص",
+    "باصات",
+    "حافلة",
+    "حافلات",
+    "ميكروباص",
+    "أوتوبيس",
+    "bus",
+    "buses",
+    "coach",
+    "minibus",
+    "van"
+  ],
+  "mobiles": [
+    "موبايل",
+    "موبايلات",
+    "جوال",
+    "جوالات",
+    "هاتف",
+    "هواتف",
+    "تلفون",
+    "تلفونات",
+    "خلوي",
+    "mobile",
+    "phone",
+    "smartphone",
+    "cellphone",
+    "cellular",
+    "handset"
+  ],
+  "laptops": [
+    "لابتوب",
+    "لابتوبات",
+    "حاسوب محمول",
+    "لاب توب",
+    "كمبيوتر محمول",
+    "laptop",
+    "laptops",
+    "notebook",
+    "macbook",
+    "ultrabook",
+    "chromebook"
+  ],
+  "tablets": [
+    "تابلت",
+    "آيباد",
+    "ايباد",
+    "لوحي",
+    "tablet",
+    "tablets",
+    "ipad",
+    "tab",
+    "kindle",
+    "e-reader"
+  ],
+  "computers": [
+    "كمبيوتر",
+    "حاسوب",
+    "بي سي",
+    "ديسكتوب",
+    "طاولة",
+    "computer",
+    "computers",
+    "desktop",
+    "pc",
+    "workstation",
+    "tower",
+    "monitor"
+  ],
+  "furniture": [
+    "أثاث",
+    "اثاث",
+    "موبيليا",
+    "مفروشات",
+    "عفش",
+    "furniture",
+    "furnishing",
+    "decor",
+    "upholstery",
+    "fittings"
+  ],
+  "special-properties": [
+    "عقارات مميزة",
+    "عقار مميز",
+    "special-properties",
+    "luxury properties",
+    "unique properties",
+    "featured"
+  ],
+  "industrial": [
+    "صناعي",
+    "صناعية",
+    "مصنع",
+    "مصانع",
+    "ورشة",
+    "industrial",
+    "factory",
+    "manufacturing",
+    "plant",
+    "workshop"
+  ],
+  "residential": [
+    "سكني",
+    "سكنية",
+    "للسكن",
+    "residential",
+    "housing",
+    "living"
+  ],
+  "akkad": [
+    "عقاد",
+    "akkad"
+  ],
+  "aprilia": [
+    "أبريليا",
+    "ابريليا",
+    "aprilia"
+  ],
+  "arora": [
+    "أرورا",
+    "arora"
+  ],
+  "bsa": [
+    "بي إس إيه",
+    "bsa"
+  ],
+  "bajaj": [
+    "باجاج",
+    "بجاج",
+    "bajaj",
+    "boxer",
+    "pulsar"
+  ],
+  "bajaj-three-wheeler": [
+    "بجاج ثلاث عجلات",
+    "توك توك",
+    "ركشة",
+    "bajaj-three-wheeler",
+    "tuk tuk",
+    "rickshaw",
+    "auto rickshaw"
+  ],
+  "benelli": [
+    "بينيلي",
+    "benelli"
+  ],
+  "bisan": [
+    "بيسان",
+    "bisan"
+  ],
+  "cfmoto": [
+    "سي اف موتو",
+    "cfmoto"
+  ],
+  "cfmoto-atv": [
+    "سي اف موتو دباب",
+    "cfmoto-atv"
+  ],
+  "cg": [
+    "سي جي",
+    "cg"
+  ],
+  "can-am": [
+    "كان آم",
+    "can-am",
+    "canam"
+  ],
+  "cobra": [
+    "كوبرا",
+    "cobra"
+  ],
+  "dayun": [
+    "دايون",
+    "dayun"
+  ],
+  "ducati": [
+    "دوكاتي",
+    "ducati"
+  ],
+  "e-bike": [
+    "دراجة كهربائية",
+    "بيسكليت كهرباء",
+    "e-bike",
+    "electric bike",
+    "ebike"
+  ],
+  "e-scooter": [
+    "سكوتر كهربائي",
+    "سكوتر كهرباء",
+    "e-scooter",
+    "electric scooter"
+  ],
+  "haojue": [
+    "هاوجو",
+    "haojue"
+  ],
+  "hawa": [
+    "هوا",
+    "hawa"
+  ],
+  "hero": [
+    "هيرو",
+    "hero"
+  ],
+  "honda-atv": [
+    "هوندا دباب",
+    "تراكتورون هوندا",
+    "honda-atv",
+    "honda quad"
+  ],
+  "honda-classic": [
+    "هوندا كلاسيك",
+    "honda-classic"
+  ],
+  "honda-scooter": [
+    "سكوتر هوندا",
+    "honda-scooter"
+  ],
+  "husqvarna": [
+    "هوسكفارنا",
+    "husqvarna",
+    "husky"
+  ],
+  "jawa": [
+    "جاوا",
+    "jawa"
+  ],
+  "jianshe": [
+    "جيانشي",
+    "jianshe"
+  ],
+  "ktm": [
+    "كي تي إم",
+    "كي تي ام",
+    "ktm"
+  ],
+  "kavir": [
+    "كوير",
+    "kavir"
+  ],
+  "kawasaki": [
+    "كاواساكي",
+    "kawasaki",
+    "ninja"
+  ],
+  "keeway": [
+    "كي واي",
+    "keeway"
+  ],
+  "kymco": [
+    "كيمكو",
+    "kymco"
+  ],
+  "loncin": [
+    "لونسين",
+    "loncin"
+  ],
+  "mondial": [
+    "مونديال",
+    "mondial"
+  ],
+  "moto-guzzi": [
+    "موتو جوزي",
+    "moto-guzzi"
+  ],
+  "norton": [
+    "نورتون",
+    "norton"
+  ],
+  "part": [
+    "بارت",
+    "part"
+  ],
+  "piaggio-three-wheeler": [
+    "بياجيو ثلاث عجلات",
+    "piaggio-three-wheeler",
+    "ape"
+  ],
+  "polaris": [
+    "بولاريس",
+    "polaris",
+    "rzr"
+  ],
+  "qjmotor": [
+    "كيو جيه موتور",
+    "qjmotor"
+  ],
+  "qlink": [
+    "كيو لينك",
+    "qlink"
+  ],
+  "rks": [
+    "آر كيه إس",
+    "rks"
+  ],
+  "rato": [
+    "راتو",
+    "rato"
+  ],
+  "rewa": [
+    "ريوا",
+    "rewa"
+  ],
+  "royal-enfield": [
+    "رويال إنفيلد",
+    "royal-enfield",
+    "enfield"
+  ],
+  "sym": [
+    "إس واي إم",
+    "sym"
+  ],
+  "shark": [
+    "شارك",
+    "shark"
+  ],
+  "shineray": [
+    "شينراي",
+    "shineray"
+  ],
+  "skygo": [
+    "سكاي جو",
+    "skygo"
+  ],
+  "suzuki-atv": [
+    "سوزوكي دباب",
+    "suzuki-atv",
+    "quadrunner"
+  ],
+  "suzuki-classic": [
+    "سوزوكي كلاسيك",
+    "suzuki-classic"
+  ],
+  "tvs": [
+    "تي في اس",
+    "tvs",
+    "apache"
+  ],
+  "tvs-three-wheeler": [
+    "تي في اس ثلاث عجلات",
+    "tvs-three-wheeler",
+    "tvs king"
+  ],
+  "triumph": [
+    "ترايمف",
+    "triumph"
+  ],
+  "vespa": [
+    "فيسبا",
+    "vespa"
+  ],
+  "yamaha": [
+    "ياماها",
+    "yamaha"
+  ],
+  "yamaha-atv": [
+    "ياماها دباب",
+    "yamaha-atv",
+    "raptor",
+    "grizzly"
+  ],
+  "yamasaki": [
+    "ياماساكي",
+    "yamasaki"
+  ],
+  "tayba": [
+    "طيبة",
+    "tayba"
+  ],
+  "znen": [
+    "زينين",
+    "znen"
+  ],
+  "zongshen": [
+    "زونج شين",
+    "zongshen"
+  ],
+  "yamaha-scooter": [
+    "سكوتر ياماها",
+    "yamaha-scooter"
+  ],
+  "moto-other": [
+    "ماركات أخرى",
+    "دراجات أخرى",
+    "moto-other",
+    "other motorcycles",
+    "custom bike"
+  ],
+  "isuzu": [
+    "ايسوزو",
+    "إيسوزو",
+    "isuzu",
+    "d-max"
+  ],
+  "bmw": [
+    "بي ام دبليو",
+    "بي ام",
+    "bmw",
+    "beemer",
+    "bimmer"
+  ],
+  "toyota": [
+    "تويوتا",
+    "تيوتا",
+    "toyota",
+    "camry",
+    "corolla",
+    "land cruiser",
+    "hilux"
+  ],
+  "gmc": [
+    "جي إم سي",
+    "جمس",
+    "gmc",
+    "yukon",
+    "sierra"
+  ],
+  "jeep": [
+    "جيب",
+    "jeep",
+    "wrangler",
+    "cherokee"
+  ],
+  "ford": [
+    "فورد",
+    "ford",
+    "mustang",
+    "f-150",
+    "explorer"
+  ],
+  "fiat": [
+    "فيات",
+    "fiat",
+    "500"
+  ],
+  "honda": [
+    "هوندا",
+    "honda",
+    "civic",
+    "accord",
+    "cr-v"
+  ],
+  "hyundai": [
+    "هيونداي",
+    "هونداي",
+    "hyundai",
+    "elantra",
+    "accent",
+    "tucson",
+    "sonata"
+  ],
+  "audi": [
+    "أودي",
+    "اودي",
+    "audi"
+  ],
+  "skoda": [
+    "سكودا",
+    "skoda",
+    "octavia"
+  ],
+  "volvo": [
+    "فولفو",
+    "volvo"
+  ],
+  "mazda": [
+    "مازدا",
+    "mazda"
+  ],
+  "mercedes-benz": [
+    "مرسيدس بنز",
+    "مرسيدس",
+    "mercedes-benz",
+    "mercedes",
+    "merc",
+    "benz",
+    "amg"
+  ],
+  "nissan": [
+    "نيسان",
+    "nissan",
+    "patrol",
+    "sunny",
+    "altima"
+  ],
+  "avatar": [
+    "افاتار",
+    "avatar"
+  ],
+  "baic": [
+    "بايك",
+    "baic"
+  ],
+  "aston-martin": [
+    "استون مارتن",
+    "أستون مارتن",
+    "aston-martin",
+    "aston"
+  ],
+  "bentley": [
+    "بنتلي",
+    "bentley"
+  ],
+  "bestune": [
+    "بستيون",
+    "bestune"
+  ],
+  "borgward": [
+    "بورجوارد",
+    "borgward"
+  ],
+  "buick": [
+    "بويك",
+    "buick"
+  ],
+  "byd": [
+    "بي واي دي",
+    "byd"
+  ],
+  "cadillac": [
+    "كاديلاك",
+    "cadillac",
+    "escalade"
+  ],
+  "changan": [
+    "شانجان",
+    "changan"
+  ],
+  "chery": [
+    "شيري",
+    "chery",
+    "tiggo"
+  ],
+  "chevrolet": [
+    "شيفروليه",
+    "شفروليه",
+    "شيفرولية",
+    "chevrolet",
+    "chevy",
+    "tahoe",
+    "camaro"
+  ],
+  "chrysler": [
+    "كرايسلر",
+    "chrysler"
+  ],
+  "citroen": [
+    "ستيروين",
+    "سيتروين",
+    "citroen"
+  ],
+  "daewoo": [
+    "دايو",
+    "daewoo"
+  ],
+  "daihatsu": [
+    "دايهاتسو",
+    "daihatsu"
+  ],
+  "dfm": [
+    "دي اف ام",
+    "dfm"
+  ],
+  "dfsk": [
+    "دي اف اس كي",
+    "dfsk"
+  ],
+  "dodge": [
+    "دودج",
+    "دوج",
+    "dodge",
+    "charger",
+    "challenger",
+    "ram"
+  ],
+  "dongfeng": [
+    "دونج فينج",
+    "dongfeng"
+  ],
+  "faw": [
+    "فاو",
+    "faw"
+  ],
+  "ferrari": [
+    "فيراري",
+    "ferrari"
+  ],
+  "forthing-2": [
+    "فورثينج",
+    "forthing-2",
+    "forthing"
+  ],
+  "foton": [
+    "فوتون",
+    "foton"
+  ],
+  "gac": [
+    "جي أيه سي",
+    "gac"
+  ],
+  "geely": [
+    "جيلي",
+    "geely"
+  ],
+  "genesis": [
+    "جينيسيس",
+    "جنسس",
+    "genesis"
+  ],
+  "great-wall": [
+    "جريت وول",
+    "great-wall",
+    "great wall"
+  ],
+  "haval": [
+    "هافال",
+    "haval"
+  ],
+  "hawtai": [
+    "هاوتاي",
+    "hawtai"
+  ],
+  "hongqi": [
+    "هونج تشي",
+    "hongqi"
+  ],
+  "hummer-1": [
+    "هامر",
+    "hummer-1",
+    "hummer"
+  ],
+  "hunaghai": [
+    "هونغهاي",
+    "hunaghai"
+  ],
+  "im": [
+    "آي إم",
+    "im"
+  ],
+  "ineos": [
+    "اينوس",
+    "ineos"
+  ],
+  "infiniti": [
+    "إنفينيتي",
+    "انفنتي",
+    "infiniti"
+  ],
+  "iran-khodro": [
+    "ايران خودرو",
+    "iran-khodro",
+    "ikco"
+  ],
+  "jac": [
+    "جاك",
+    "jac"
+  ],
+  "jaguar": [
+    "جاكوار",
+    "jaguar",
+    "jag"
+  ],
+  "jetour": [
+    "جيتور",
+    "jetour"
+  ],
+  "jmc": [
+    "جاي ام سي",
+    "jmc"
+  ],
+  "jmev": [
+    "جاي ام اي في",
+    "jmev"
+  ],
+  "kaiyi": [
+    "كايي",
+    "kaiyi"
+  ],
+  "kia": [
+    "كيا",
+    "kia",
+    "sportage",
+    "cerato",
+    "picanto",
+    "sorento"
+  ],
+  "lada": [
+    "لادا",
+    "lada"
+  ],
+  "lamborghini": [
+    "لامبورغيني",
+    "lamborghini",
+    "lambo"
+  ],
+  "lancia": [
+    "لانسيا",
+    "lancia"
+  ],
+  "land-rover": [
+    "لاند روفر",
+    "لاند روڤر",
+    "land-rover",
+    "range rover",
+    "defender"
+  ],
+  "leapmotor": [
+    "ليب موتور",
+    "leapmotor"
+  ],
+  "lexus": [
+    "لكزس",
+    "lexus",
+    "lx",
+    "es"
+  ],
+  "lifan": [
+    "ليفان",
+    "lifan"
+  ],
+  "lincoln": [
+    "لينكولن",
+    "لنكولن",
+    "lincoln"
+  ],
+  "ling-box": [
+    "لينج بوكس",
+    "ling-box"
+  ],
+  "mahindra": [
+    "ماهيندرا",
+    "mahindra"
+  ],
+  "maruti-suzuki": [
+    "ماروتي سوزوكي",
+    "maruti-suzuki",
+    "maruti"
+  ],
+  "maserati": [
+    "مازيراتي",
+    "maserati"
+  ],
+  "maxus": [
+    "ماكسيوس",
+    "maxus"
+  ],
+  "mclaren": [
+    "مكلارين",
+    "mclaren"
+  ],
+  "mercury": [
+    "ميركوري",
+    "mercury"
+  ],
+  "mg": [
+    "ام جي",
+    "mg"
+  ],
+  "mini": [
+    "ميني",
+    "ميني كوبر",
+    "mini",
+    "cooper"
+  ],
+  "mitsubishi": [
+    "ميتسوبيشي",
+    "متسوبيشي",
+    "mitsubishi",
+    "pajero",
+    "lancer"
+  ],
+  "neta": [
+    "نيتا",
+    "neta"
+  ],
+  "opel": [
+    "أوبل",
+    "اوبل",
+    "opel",
+    "astra",
+    "corsa"
+  ],
+  "pagani": [
+    "باجاني",
+    "pagani"
+  ],
+  "peugeot": [
+    "بيجو",
+    "peugeot",
+    "206",
+    "3008",
+    "5008"
+  ],
+  "polestar": [
+    "بولستار",
+    "polestar"
+  ],
+  "pontiac": [
+    "بونتياك",
+    "pontiac"
+  ],
+  "porsche": [
+    "بورش",
+    "بورشه",
+    "porsche",
+    "cayenne",
+    "911",
+    "panamera"
+  ],
+  "proton": [
+    "بروتون",
+    "proton"
+  ],
+  "rabdan": [
+    "ربدان",
+    "rabdan"
+  ],
+  "renault": [
+    "رينو",
+    "renault",
+    "logan",
+    "megane",
+    "duster"
+  ],
+  "rolls-royce": [
+    "رولز رویس",
+    "رولز رويس",
+    "rolls-royce",
+    "rr"
+  ],
+  "rox": [
+    "روكس",
+    "rox"
+  ],
+  "saab": [
+    "ساب",
+    "saab"
+  ],
+  "saipa": [
+    "سايبا",
+    "saipa"
+  ],
+  "samsung": [
+    "سامسونج",
+    "samsung"
+  ],
+  "saturn": [
+    "ساتورن",
+    "saturn"
+  ],
+  "scion": [
+    "سيون",
+    "scion"
+  ],
+  "seat": [
+    "سيات",
+    "seat",
+    "ibiza",
+    "leon"
+  ],
+  "skywell": [
+    "سكاي ويل",
+    "skywell"
+  ],
+  "smart-1": [
+    "سمارت",
+    "smart-1",
+    "smart car"
+  ],
+  "soueast": [
+    "ساوايست",
+    "soueast"
+  ],
+  "spyker": [
+    "سبايكر",
+    "spyker"
+  ],
+  "ssangyong": [
+    "سانغ يونغ",
+    "سانج يونج",
+    "ssangyong"
+  ],
+  "subaru": [
+    "سوبارو",
+    "subaru"
+  ],
+  "suzuki": [
+    "سوزوكي",
+    "suzuki",
+    "swift",
+    "jimny"
+  ],
+  "tank": [
+    "تانك",
+    "tank"
+  ],
+  "tata": [
+    "تاتا",
+    "tata"
+  ],
+  "tesla": [
+    "تيسلا",
+    "تسلا",
+    "tesla",
+    "model s",
+    "model 3",
+    "model x",
+    "model y"
+  ],
+  "vgv": [
+    "في جي في",
+    "vgv"
+  ],
+  "volkswagen": [
+    "فولكسفاغن",
+    "فولكس فاجن",
+    "volkswagen",
+    "vw",
+    "golf",
+    "passat",
+    "tiguan"
+  ],
+  "weltmeister": [
+    "ويلتميستر",
+    "weltmeister"
+  ],
+  "wuling": [
+    "وولينغ",
+    "wuling"
+  ],
+  "yudo": [
+    "يودو",
+    "yudo"
+  ],
+  "zeekr": [
+    "زيكر",
+    "zeekr"
+  ],
+  "zotye": [
+    "زوتي",
+    "zotye"
+  ],
+  "zx-auto": [
+    "زد إكس اوتو",
+    "zx-auto"
+  ],
+  "acura": [
+    "اكيورا",
+    "أكيورا",
+    "acura"
+  ],
+  "alfa-romeo": [
+    "الفا روميو",
+    "ألفا روميو",
+    "alfa-romeo"
+  ],
+  "boats": [
+    "القوارب",
+    "قوارب",
+    "يخت",
+    "يخوت",
+    "سفينة",
+    "جت سكي",
+    "boats",
+    "boat",
+    "yacht",
+    "yachts",
+    "ship",
+    "vessel",
+    "jet ski",
+    "marine"
+  ],
+  "equipment": [
+    "المعدات",
+    "معدات",
+    "آلات",
+    "اليات",
+    "equipment",
+    "machinery",
+    "heavy equipment",
+    "tools",
+    "industrial tools"
+  ],
+  "spare-parts": [
+    "قطع الغيار",
+    "قطع غيار",
+    "اكسسوارات سيارات",
+    "spare-parts",
+    "spare parts",
+    "parts",
+    "accessories",
+    "components",
+    "auto parts"
+  ],
+  "digital-marketing-social-media": [
+    "التسويق الرقمي والسوشيال ميديا",
+    "تسويق الكتروني",
+    "سوشيال ميديا",
+    "إعلانات",
+    "digital-marketing-social-media",
+    "digital marketing",
+    "social media",
+    "seo",
+    "sem",
+    "advertising",
+    "online marketing"
+  ],
+  "business-consulting-strategy": [
+    "الاستشارات والاستراتيجية",
+    "استشارات",
+    "دراسة جدوى",
+    "business-consulting-strategy",
+    "consulting",
+    "strategy",
+    "business plan",
+    "advisory"
+  ],
+  "legal-professional-services": [
+    "الخدمات القانونية والمهنية",
+    "محاماة",
+    "قانون",
+    "محامي",
+    "legal-professional-services",
+    "legal services",
+    "lawyer",
+    "attorney",
+    "legal advice",
+    "notary"
+  ],
+  "ecommerce-online-business": [
+    "التجارة الإلكترونية والأعمال الرقمية",
+    "تجارة الكترونية",
+    "متجر الكتروني",
+    "ecommerce-online-business",
+    "ecommerce",
+    "e-commerce",
+    "online store",
+    "dropshipping"
+  ],
+  "financial-services-consulting": [
+    "الخدمات المالية والاستشارات",
+    "محاسبة",
+    "تدقيق",
+    "ضرائب",
+    "financial-services-consulting",
+    "financial services",
+    "accounting",
+    "auditing",
+    "tax",
+    "finance"
+  ],
+  "human-resources-recruitment": [
+    "الموارد البشرية والتوظيف",
+    "توظيف",
+    "اتش ار",
+    "human-resources-recruitment",
+    "hr",
+    "human resources",
+    "recruitment",
+    "staffing",
+    "hiring"
+  ],
+  "insurance-risk-management": [
+    "التأمين وإدارة المخاطر",
+    "تأمين",
+    "insurance-risk-management",
+    "insurance",
+    "risk management",
+    "underwriting",
+    "policy"
+  ],
+  "import-export-services": [
+    "خدمات الاستيراد والتصدير",
+    "استيراد وتصدير",
+    "تخليص جمركي",
+    "شحن",
+    "import-export-services",
+    "import",
+    "export",
+    "logistics",
+    "customs clearance",
+    "freight"
+  ],
+  "graphic-design-visual-services": [
+    "التصميم الجرافيكي والخدمات البصرية",
+    "تصميم جرافيك",
+    "مصمم",
+    "لوجو",
+    "graphic-design-visual-services",
+    "graphic design",
+    "visual arts",
+    "logo design",
+    "branding",
+    "illustration"
+  ],
+  "video-production-editing": [
+    "إنتاج ومونتاج الفيديو",
+    "مونتاج",
+    "تعديل فيديو",
+    "video-production-editing",
+    "video production",
+    "video editing",
+    "videography",
+    "filming",
+    "montage"
+  ],
+  "writing-translation-services": [
+    "الكتابة والترجمة",
+    "ترجمة",
+    "كتابة محتوى",
+    "writing-translation-services",
+    "writing",
+    "translation",
+    "copywriting",
+    "content writing",
+    "proofreading"
+  ],
+  "audio-voice-services": [
+    "الخدمات الصوتية والتعليق",
+    "تعليق صوتي",
+    "هندسة صوتية",
+    "audio-voice-services",
+    "voice over",
+    "audio services",
+    "sound engineering",
+    "recording"
+  ],
+  "photography-image-services": [
+    "التصوير وخدمات الصور",
+    "تصوير",
+    "مصور",
+    "تعديل صور",
+    "photography-image-services",
+    "photography",
+    "photo shoot",
+    "photographer",
+    "image editing",
+    "retouching"
+  ],
+  "interior-design-decoration": [
+    "التصميم الداخلي والديكور",
+    "ديكور",
+    "تصميم داخلي",
+    "interior-design-decoration",
+    "interior design",
+    "decoration",
+    "decor",
+    "home styling"
+  ],
+  "web-development-programming": [
+    "تطوير المواقع والبرمجة",
+    "برمجة",
+    "تطوير ويب",
+    "web-development-programming",
+    "web development",
+    "programming",
+    "coding",
+    "web design",
+    "app development"
+  ],
+  "data-analytics-services": [
+    "خدمات البيانات والتحليل",
+    "تحليل بيانات",
+    "data-analytics-services",
+    "data analytics",
+    "data analysis",
+    "big data",
+    "statistics"
+  ],
+  "technology-it-support": [
+    "التكنولوجيا ودعم تقنية المعلومات",
+    "دعم فني",
+    "آي تي",
+    "صيانة كمبيوتر",
+    "technology-it-support",
+    "it support",
+    "tech support",
+    "information technology",
+    "network"
+  ],
+  "training-education-services": [
+    "التدريب والتعليم",
+    "دورات",
+    "تدريس",
+    "تعليم",
+    "training-education-services",
+    "training",
+    "education",
+    "courses",
+    "tutoring",
+    "coaching"
+  ],
+  "virtual-assistant-administrative": [
+    "المساعد الافتراضي والخدمات الإدارية",
+    "مساعد شخصي",
+    "إدخال بيانات",
+    "virtual-assistant-administrative",
+    "virtual assistant",
+    "admin support",
+    "data entry",
+    "secretary"
+  ],
+  "research-content-creation": [
+    "البحث وإنشاء المحتوى",
+    "أبحاث",
+    "صناعة محتوى",
+    "research-content-creation",
+    "research",
+    "content creation",
+    "market research"
+  ],
+  "event-planning-management": [
+    "تخطيط وإدارة الفعاليات",
+    "تنظيم حفلات",
+    "مناسبات",
+    "event-planning-management",
+    "event planning",
+    "event management",
+    "party planning",
+    "wedding planner"
+  ],
+  "healthcare-medical-services": [
+    "الرعاية الصحية والخدمات الطبية",
+    "تمريض",
+    "رعاية منزلية",
+    "طبيب",
+    "healthcare-medical-services",
+    "healthcare",
+    "medical services",
+    "nursing",
+    "home care",
+    "doctor"
+  ],
+  "real-estate-services": [
+    "خدمات العقارات",
+    "سمسار",
+    "مكتب عقاري",
+    "real-estate-services",
+    "real estate services",
+    "property management",
+    "realtor",
+    "broker"
+  ],
+  "architecture-engineering-services": [
+    "خدمات الهندسة المعمارية والهندسة",
+    "هندسة",
+    "تصميم معماري",
+    "architecture-engineering-services",
+    "architecture",
+    "engineering",
+    "civil engineering",
+    "blueprints"
+  ],
+  "logistics-transportation-services": [
+    "خدمات اللوجستيات والنقل",
+    "نقل عفش",
+    "توصيل",
+    "شحن",
+    "logistics-transportation-services",
+    "logistics",
+    "transportation",
+    "shipping",
+    "moving",
+    "delivery"
+  ],
+  "food-catering-services": [
+    "خدمات الطعام والضيافة",
+    "طعام",
+    "وجبات",
+    "بوفيه",
+    "food-catering-services",
+    "catering",
+    "food services",
+    "meal prep",
+    "buffet",
+    "banquet"
+  ],
+  "beauty-personal-care-services": [
+    "خدمات التجميل والعناية الشخصية",
+    "صالون",
+    "مكياج",
+    "حلاقة",
+    "beauty-personal-care-services",
+    "beauty services",
+    "personal care",
+    "salon",
+    "makeup",
+    "hairdresser",
+    "spa"
+  ],
+  "sports-fitness-services": [
+    "خدمات الرياضة واللياقة البدنية",
+    "مدرب شخصي",
+    "جيم",
+    "رياضة",
+    "sports-fitness-services",
+    "sports",
+    "fitness",
+    "personal trainer",
+    "gym",
+    "workout"
+  ],
+  "travel-tourism-services": [
+    "خدمات السفر والسياحة",
+    "حجوزات",
+    "تأشيرات",
+    "سياحة",
+    "travel-tourism-services",
+    "travel",
+    "tourism",
+    "booking",
+    "visas",
+    "tours"
+  ],
+  "maintenance-repair-services": [
+    "خدمات الصيانة والإصلاح",
+    "صيانة",
+    "تصليح",
+    "سباكة",
+    "كهرباء",
+    "maintenance-repair-services",
+    "maintenance",
+    "repair",
+    "plumbing",
+    "electrician",
+    "handyman"
+  ],
+  "security-services": [
+    "خدمات الأمن",
+    "حراسة",
+    "كاميرات مراقبة",
+    "security-services",
+    "security",
+    "guard",
+    "surveillance",
+    "cctv"
+  ],
+  "environmental-services": [
+    "الخدمات البيئية",
+    "تنظيف",
+    "مكافحة حشرات",
+    "environmental-services",
+    "environmental",
+    "cleaning",
+    "pest control",
+    "sanitization"
+  ],
+  "manufacturing-production-services": [
+    "خدمات التصنيع والإنتاج",
+    "تصنيع",
+    "إنتاج",
+    "manufacturing-production-services",
+    "manufacturing",
+    "production",
+    "fabrication"
+  ],
+  "automotive-services": [
+    "خدمات السيارات",
+    "ميكانيكي",
+    "غسيل سيارات",
+    "تلميع",
+    "automotive-services",
+    "automotive",
+    "car service",
+    "mechanic",
+    "car wash",
+    "detailing"
+  ],
+  "telecommunications-services": [
+    "خدمات الاتصالات",
+    "اتصالات",
+    "شبكات",
+    "telecommunications-services",
+    "telecommunications",
+    "telecom",
+    "networks",
+    "internet"
+  ],
+  "coffee-side-tables": [
+    "طاولات وسط وجانبية",
+    "طاولة قهوة",
+    "طاولات خدمة",
+    "coffee-side-tables",
+    "coffee table",
+    "side table",
+    "end table",
+    "center table"
+  ],
+  "sofas-couches": [
+    "كنبايات ومقاعد",
+    "كنب",
+    "صوفا",
+    "مجلس",
+    "انتريه",
+    "طقم كنب",
+    "sofas-couches",
+    "sofa",
+    "couch",
+    "settee",
+    "seating",
+    "sectional",
+    "loveseat"
+  ],
+  "tv-units-entertainment-centers": [
+    "مكتبات تلفزيون ومراكز ترفيه",
+    "طاولة تلفزيون",
+    "وحدة تلفزيون",
+    "tv-units-entertainment-centers",
+    "tv unit",
+    "entertainment center",
+    "tv stand",
+    "media console"
+  ],
+  "recliners-accent-chairs": [
+    "كراسي استرخاء وفوتويلات",
+    "كرسي استرخاء",
+    "فوتيه",
+    "recliners-accent-chairs",
+    "recliner",
+    "armchair",
+    "accent chair",
+    "lounge chair"
+  ],
+  "beds-bed-frames": [
+    "تخوت وقواعد تخوت",
+    "سرير",
+    "أسرة",
+    "تخت",
+    "فرشة",
+    "beds-bed-frames",
+    "bed",
+    "beds",
+    "bed frame",
+    "mattress",
+    "bunk bed"
+  ],
+  "wardrobes-closets": [
+    "خزائن الملابس",
+    "خزانة ملابس",
+    "دولاب",
+    "wardrobes-closets",
+    "wardrobe",
+    "closet",
+    "cupboard",
+    "armoire"
+  ],
+  "dressers-chests": [
+    "تسريحات وخزائن جوارير",
+    "تسريحة",
+    "شفنيرة",
+    "dressers-chests",
+    "dresser",
+    "chest of drawers",
+    "bureau",
+    "vanity"
+  ],
+  "nightstands-bedside-tables": [
+    "كومودينات",
+    "كومودينة",
+    "طاولة جانبية",
+    "nightstands-bedside-tables",
+    "nightstand",
+    "bedside table"
+  ],
+  "dining-tables": [
+    "طاولات السفرة",
+    "طاولة سفرة",
+    "dining-tables",
+    "dining table",
+    "dining room table"
+  ],
+  "dining-chairs": [
+    "كراسي السفرة",
+    "كرسي سفرة",
+    "dining-chairs",
+    "dining chair",
+    "dining chairs"
+  ],
+  "kitchen-cabinets": [
+    "خزائن المطبخ",
+    "مطبخ",
+    "مطابخ",
+    "دولاب مطبخ",
+    "kitchen-cabinets",
+    "kitchen cabinet",
+    "kitchens",
+    "pantry"
+  ],
+  "office-desks": [
+    "مكاتب",
+    "مكتب",
+    "طاولة مكتب",
+    "office-desks",
+    "office desk",
+    "desk",
+    "work desk"
+  ],
+  "office-chairs": [
+    "كراسي مكتب",
+    "كرسي مكتب",
+    "office-chairs",
+    "office chair",
+    "desk chair",
+    "ergonomic chair"
+  ],
+  "outdoor-garden-furniture": [
+    "أثاث حدائق وتراسات",
+    "أثاث خارجي",
+    "جلسة خارجية",
+    "outdoor-garden-furniture",
+    "outdoor furniture",
+    "garden furniture",
+    "patio furniture"
+  ],
+  "storage-organization": [
+    "حلول التخزين والتنظيم",
+    "تخزين",
+    "رفوف",
+    "منظمات",
+    "storage-organization",
+    "storage",
+    "organization",
+    "shelving",
+    "racks",
+    "bins"
+  ],
+  "home-decor-accessories": [
+    "ديكور واكسسوارات منزلية",
+    "تحف",
+    "اكسسوارات منزل",
+    "سجاد",
+    "home-decor-accessories",
+    "home decor",
+    "accessories",
+    "rugs",
+    "curtains",
+    "mirrors"
+  ],
+  "lighting-electrical": [
+    "الإضاءة والكهربائيات",
+    "إضاءة",
+    "لمبات",
+    "ثريا",
+    "نجف",
+    "lighting-electrical",
+    "lighting",
+    "lamps",
+    "chandelier",
+    "fixtures"
+  ],
+  "textiles-soft-furnishing": [
+    "المنسوجات والمفروشات",
+    "شراشف",
+    "وسائد",
+    "textiles-soft-furnishing",
+    "textiles",
+    "bedding",
+    "cushions",
+    "linens"
+  ],
+  "childrens-furniture": [
+    "أثاث غرف أطفال",
+    "غرفة أطفال",
+    "سرير أطفال",
+    "childrens-furniture",
+    "kids furniture",
+    "children furniture",
+    "nursery furniture"
+  ],
+  "bathroom-furniture": [
+    "أثاث حمامات",
+    "خزائن حمام",
+    "مغسلة",
+    "bathroom-furniture",
+    "bathroom furniture",
+    "vanity unit",
+    "bathroom cabinet"
+  ],
+  "custom-builtin-furniture": [
+    "أثاث تفصيل ومدمج",
+    "تفصيل",
+    "custom-builtin-furniture",
+    "custom furniture",
+    "built-in",
+    "bespoke furniture"
+  ],
+  "mens-clothing-items": [
+    "ملابس رجالية",
+    "ملابس",
+    "قميص",
+    "بنطلون",
+    "تيشيرت",
+    "بدلة",
+    "جاكيت",
+    "mens-clothing-items",
+    "men's clothing",
+    "apparel",
+    "shirt",
+    "t-shirt",
+    "trousers",
+    "pants",
+    "jeans",
+    "suit",
+    "jacket"
+  ],
+  "mens-underwear": [
+    "ملابس داخلية وملابس نوم رجالية",
+    "ملابس داخلية",
+    "بيجامة",
+    "بوكسر",
+    "mens-underwear",
+    "underwear",
+    "sleepwear",
+    "pajamas",
+    "boxers",
+    "briefs"
+  ],
+  "mens-shoes": [
+    "أحذية رجالية",
+    "حذاء رجالي",
+    "كندرة",
+    "بوط",
+    "mens-shoes",
+    "men's shoes",
+    "shoes",
+    "boots",
+    "sneakers",
+    "footwear"
+  ],
+  "womens-clothing-items": [
+    "ملابس نسائية",
+    "ملابس",
+    "فستان",
+    "تنورة",
+    "بلوزة",
+    "عباية",
+    "womens-clothing-items",
+    "women's clothing",
+    "dress",
+    "skirt",
+    "blouse",
+    "abaya",
+    "top"
+  ],
+  "womens-shoes": [
+    "أحذية نسائية",
+    "حذاء نسائي",
+    "كعب",
+    "صندل",
+    "womens-shoes",
+    "women's shoes",
+    "heels",
+    "sandals",
+    "flats",
+    "boots"
+  ],
+  "womens-underwear-sleepwear": [
+    "ملابس داخلية وملابس نوم",
+    "لانجري",
+    "بيجامات نسائية",
+    "womens-underwear-sleepwear",
+    "lingerie",
+    "sleepwear",
+    "nightgown",
+    "bras",
+    "panties"
+  ],
+  "traditional-cultural-clothing": [
+    "أزياء شرقية وتراثية",
+    "قفطان",
+    "جلابية",
+    "ثوب",
+    "traditional-cultural-clothing",
+    "traditional clothing",
+    "caftan",
+    "thobe",
+    "jalabiya",
+    "ethnic wear"
+  ],
+  "boys-clothing": [
+    "ملابس ولادي",
+    "ملابس أولاد",
+    "boys-clothing",
+    "boys' clothing",
+    "kids wear",
+    "boys fashion"
+  ],
+  "girls-clothing": [
+    "ملابس بناتي",
+    "ملابس بنات",
+    "girls-clothing",
+    "girls' clothing",
+    "girls fashion",
+    "kids dresses"
+  ],
+  "childrens-shoes": [
+    "أحذية أطفال",
+    "حذاء أطفال",
+    "childrens-shoes",
+    "kids shoes",
+    "children's footwear"
+  ],
+  "baby-clothing": [
+    "ملابس بيبي",
+    "ملابس رضع",
+    "أفرول",
+    "baby-clothing",
+    "baby clothes",
+    "infant wear",
+    "romper",
+    "onesie"
+  ],
+  "other-accessories": [
+    "اكسسوارات أخرى",
+    "نظارات",
+    "قبعات",
+    "أحزمة",
+    "other-accessories",
+    "accessories",
+    "sunglasses",
+    "hats",
+    "belts",
+    "scarves"
+  ],
+  "bags-and-luggage-items": [
+    "حقائب وشنط",
+    "شنطة",
+    "حقيبة",
+    "حقيبة سفر",
+    "bags-and-luggage-items",
+    "bags",
+    "luggage",
+    "handbag",
+    "purse",
+    "suitcase",
+    "backpack"
+  ],
+  "jewelry-and-watches": [
+    "مجوهرات وساعات",
+    "ذهب",
+    "فضة",
+    "ساعة",
+    "خاتم",
+    "عقد",
+    "jewelry-and-watches",
+    "jewelry",
+    "jewellery",
+    "watches",
+    "gold",
+    "silver",
+    "ring",
+    "necklace",
+    "bracelet"
+  ],
+  "sports-shoes": [
+    "أحذية رياضية (سبور)",
+    "حذاء رياضي",
+    "كوتشي",
+    "sports-shoes",
+    "sports shoes",
+    "athletic shoes",
+    "trainers",
+    "running shoes",
+    "sneakers"
+  ],
+  "portable-generators": [
+    "مولدات محمولة (شنطة)",
+    "مولد صغير",
+    "portable-generators",
+    "portable generator",
+    "inverter generator"
+  ],
+  "standby-generators": [
+    "مولدات ثابتة (احتياطية)",
+    "مولد كبير",
+    "standby-generators",
+    "standby generator",
+    "backup generator"
+  ],
+  "diesel-generators": [
+    "مولدات ديزل",
+    "ماطور ديزل",
+    "diesel-generators",
+    "diesel generator",
+    "genset"
+  ],
+  "petrol-gas-generators": [
+    "مولدات بنزين",
+    "ماطور بنزين",
+    "petrol-gas-generators",
+    "petrol generator",
+    "gas generator",
+    "gasoline generator"
+  ],
+  "industrial-generators": [
+    "مولدات صناعية",
+    "industrial-generators",
+    "industrial generator",
+    "heavy duty generator"
+  ],
+  "home-ups": [
+    "يو بي إس منزلي",
+    "home-ups",
+    "home ups",
+    "uninterruptible power supply"
+  ],
+  "office-ups": [
+    "يو بي إس مكتبي",
+    "office-ups",
+    "office ups"
+  ],
+  "industrial-ups": [
+    "يو بي إس صناعي",
+    "industrial-ups",
+    "industrial ups",
+    "3 phase ups"
+  ],
+  "solar-panels": [
+    "ألواح طاقة شمسية",
+    "ألواح شمسية",
+    "طاقة شمسية",
+    "solar-panels",
+    "solar panels",
+    "pv panels",
+    "solar energy"
+  ],
+  "solar-inverters": [
+    "انفرترات طاقة شمسية",
+    "انفرتر شمسي",
+    "solar-inverters",
+    "solar inverter",
+    "solar converter"
+  ],
+  "solar-batteries": [
+    "بطاريات طاقة شمسية",
+    "بطارية جل",
+    "ليثيوم",
+    "solar-batteries",
+    "solar batteries",
+    "gel battery",
+    "lithium battery"
+  ],
+  "solar-charge-controllers": [
+    "منظمات شحن شمسية",
+    "منظم شحن",
+    "solar-charge-controllers",
+    "charge controller",
+    "solar regulator"
+  ],
+  "electric-power-tools": [
+    "عدة شغل كهربائية (سلكية)",
+    "دريل",
+    "صاروخ",
+    "منشار",
+    "electric-power-tools",
+    "power tools",
+    "electric tools",
+    "drill",
+    "saw",
+    "grinder"
+  ],
+  "battery-power-tools": [
+    "عدة شغل لاسلكية (بطارية)",
+    "دريل شحن",
+    "battery-power-tools",
+    "cordless tools",
+    "battery tools"
+  ],
+  "electrical-equipment": [
+    "تجهيزات ومستلزمات كهربائية",
+    "قواطع",
+    "أفياش",
+    "electrical-equipment",
+    "electrical supplies",
+    "circuit breaker",
+    "sockets",
+    "switches"
+  ],
+  "batteries": [
+    "بطاريات",
+    "بطارية",
+    "batteries",
+    "battery",
+    "cells"
+  ],
+  "inverters-converters": [
+    "انفرترات (عاكسات)",
+    "انفرتر",
+    "محول",
+    "inverters-converters",
+    "inverter",
+    "converter",
+    "power inverter"
+  ],
+  "voltage-stabilizers": [
+    "منظمات جهد (ستبلايزر)",
+    "منظم كهرباء",
+    "voltage-stabilizers",
+    "stabilizer",
+    "voltage regulator",
+    "avs"
+  ],
+  "power-cables-wiring": [
+    "كابلات وأسلاك كهرباء",
+    "اسلاك",
+    "كوابل",
+    "power-cables-wiring",
+    "cables",
+    "wires",
+    "wiring",
+    "cords"
+  ],
+  "lighting-equipment": [
+    "إنارة ومعدات إضاءة",
+    "كشافات",
+    "lighting-equipment",
+    "lighting equipment",
+    "floodlights",
+    "led"
+  ],
+  "electrical-safety-equipment": [
+    "معدات السلامة الكهربائية",
+    "عازل",
+    "electrical-safety-equipment",
+    "safety equipment",
+    "insulation",
+    "protection"
+  ],
+  "power-distribution": [
+    "لوحات وتجهيزات توزيع الطاقة",
+    "لوحة كهرباء",
+    "power-distribution",
+    "distribution board",
+    "panel board",
+    "switchgear"
+  ],
+  "renewable-energy": [
+    "حلول الطاقة المتجددة",
+    "renewable-energy",
+    "renewable energy",
+    "green energy",
+    "wind energy"
+  ],
+  "generator-parts-accessories": [
+    "قطع غيار واكسسوارات المولدات",
+    "فلتر",
+    "generator-parts-accessories",
+    "generator parts",
+    "spare parts",
+    "filters"
+  ],
+  "power-monitoring": [
+    "أجهزة قياس ومراقبة الطاقة",
+    "ساعة كهرباء",
+    "power-monitoring",
+    "power meter",
+    "multimeter",
+    "energy monitor"
+  ],
+  "cleansers": [
+    "غسول ومنظفات البشرة",
+    "غسول وجه",
+    "صابون",
+    "cleansers",
+    "face wash",
+    "facial cleanser",
+    "soap"
+  ],
+  "moisturizers": [
+    "كريمات مرطبة",
+    "مرطب",
+    "لوشن",
+    "moisturizers",
+    "moisturizer",
+    "cream",
+    "lotion",
+    "hydration"
+  ],
+  "serums-treatments": [
+    "سيرومات وعلاجات",
+    "سيروم",
+    "serums-treatments",
+    "serum",
+    "treatment",
+    "face oil"
+  ],
+  "acne-blemish-care": [
+    "علاج حب الشباب وآثاره",
+    "حب الشباب",
+    "acne-blemish-care",
+    "acne",
+    "pimples",
+    "blemish",
+    "spot treatment"
+  ],
+  "anti-aging-treatment": [
+    "مكافحة التجاعيد وعلاجات متقدمة",
+    "تجاعيد",
+    "anti-aging-treatment",
+    "anti-aging",
+    "wrinkles",
+    "anti-wrinkle",
+    "collagen"
+  ],
+  "face-makeup": [
+    "مكياج الوجه",
+    "كريم أساس",
+    "بودرة",
+    "كونسيلر",
+    "face-makeup",
+    "foundation",
+    "powder",
+    "concealer",
+    "blush",
+    "bronzer"
+  ],
+  "eye-makeup": [
+    "مكياج العيون",
+    "مسكرة",
+    "ايلاينر",
+    "eye-makeup",
+    "mascara",
+    "eyeliner",
+    "eyeshadow",
+    "kohl"
+  ],
+  "lip-makeup": [
+    "مكياج الشفاه (حمرة)",
+    "روج",
+    "أحمر شفاه",
+    "lip-makeup",
+    "lipstick",
+    "lip gloss",
+    "lip liner"
+  ],
+  "shampoo-conditioner": [
+    "شامبو وبلسم",
+    "shampoo-conditioner",
+    "shampoo",
+    "conditioner"
+  ],
+  "hair-styling": [
+    "مصففات شعر",
+    "جل",
+    "واكس",
+    "سشوار",
+    "hair-styling",
+    "hair styling",
+    "gel",
+    "wax",
+    "hair dryer",
+    "straightener"
+  ],
+  "hair-treatments": [
+    "ماسكات وزيوت وعلاجات للشعر",
+    "زيت شعر",
+    "ماسك شعر",
+    "hair-treatments",
+    "hair oil",
+    "hair mask",
+    "hair serum",
+    "keratin"
+  ],
+  "shaving-products": [
+    "مستلزمات الحلاقة",
+    "شفرات",
+    "معجون حلاقة",
+    "shaving-products",
+    "shaving",
+    "razors",
+    "shaving cream",
+    "aftershave"
+  ],
+  "beard-care": [
+    "العناية باللحية والشارب",
+    "زيت لحية",
+    "beard-care",
+    "beard oil",
+    "beard balm",
+    "grooming"
+  ],
+  "mens-skincare": [
+    "العناية ببشرة الرجل",
+    "mens-skincare",
+    "men's skincare",
+    "face wash for men"
+  ],
+  "organic-natural-products": [
+    "منتجات طبيعية وعضوية",
+    "عضوي",
+    "organic-natural-products",
+    "organic",
+    "natural",
+    "herbal"
+  ],
+  "fragrances-perfumes": [
+    "عطورات",
+    "عطور",
+    "بارفان",
+    "fragrances-perfumes",
+    "perfume",
+    "fragrance",
+    "cologne",
+    "scent",
+    "eau de parfum"
+  ],
+  "personal-hygiene": [
+    "النظافة الشخصية",
+    "مزيل عرق",
+    "personal-hygiene",
+    "hygiene",
+    "deodorant",
+    "antiperspirant",
+    "body wash"
+  ],
+  "nail-care": [
+    "العناية بالأظافر",
+    "مناكير",
+    "nail-care",
+    "nail polish",
+    "manicure",
+    "pedicure",
+    "nail file"
+  ],
+  "body-care": [
+    "العناية بالجسم",
+    "مقشر",
+    "body-care",
+    "body lotion",
+    "body scrub",
+    "body oil"
+  ],
+  "oral-care": [
+    "العناية بالفم والأسنان",
+    "معجون أسنان",
+    "فرشاة أسنان",
+    "oral-care",
+    "toothpaste",
+    "toothbrush",
+    "mouthwash",
+    "dental floss"
+  ],
+  "health-wellness": [
+    "فيتامينات ومكملات غذائية",
+    "فيتامين",
+    "مكملات",
+    "health-wellness",
+    "vitamins",
+    "supplements",
+    "wellness",
+    "health"
+  ],
+  "beauty-tools-accessories": [
+    "أدوات واكسسوارات تجميل",
+    "فرش مكياج",
+    "beauty-tools-accessories",
+    "beauty tools",
+    "makeup brushes",
+    "sponges"
+  ],
+  "baby-care": [
+    "العناية بالطفل والرضع",
+    "حفاضات",
+    "وايبس",
+    "baby-care",
+    "baby products",
+    "diapers",
+    "wipes",
+    "baby lotion"
+  ],
+  "sun-care": [
+    "واقيات شمسية",
+    "واقي شمس",
+    "sun-care",
+    "sunscreen",
+    "sunblock",
+    "tanning"
+  ],
+  "birds-for-sale": [
+    "طيور للبيع",
+    "طيور",
+    "عصافير",
+    "كناري",
+    "ببغاء",
+    "حمام",
+    "birds-for-sale",
+    "birds",
+    "parrots",
+    "canary",
+    "pigeons",
+    "lovebirds"
+  ],
+  "dogs-for-sale": [
+    "كلاب للبيع",
+    "كلاب",
+    "جرو",
+    "dogs-for-sale",
+    "dogs",
+    "puppies",
+    "puppy",
+    "husky",
+    "german shepherd",
+    "golden retriever"
+  ],
+  "cats-for-sale": [
+    "قطط للبيع",
+    "قطط",
+    "بسس",
+    "قطة",
+    "شيرازي",
+    "cats-for-sale",
+    "cats",
+    "kittens",
+    "persian",
+    "siamese"
+  ],
+  "fish-for-sale": [
+    "أسماك زينة للبيع",
+    "سمك زينة",
+    "fish-for-sale",
+    "fish",
+    "aquarium fish",
+    "goldfish"
+  ],
+  "rabbits-for-sale": [
+    "أرانب للبيع",
+    "أرانب",
+    "ارنب",
+    "rabbits-for-sale",
+    "rabbits",
+    "bunny",
+    "bunnies"
+  ],
+  "exotic-pets-for-sale": [
+    "حيوانات نادرة للبيع",
+    "سلاحف",
+    "هامستر",
+    "exotic-pets-for-sale",
+    "exotic pets",
+    "turtles",
+    "hamsters",
+    "reptiles"
+  ],
+  "pet-food-and-treats": [
+    "أطعمة ومكافآت",
+    "أكل قطط",
+    "أكل كلاب",
+    "pet-food-and-treats",
+    "pet food",
+    "cat food",
+    "dog food",
+    "treats"
+  ],
+  "fish-aquarium-supplies-new": [
+    "مستلزمات الأسماك والأحواض",
+    "حوض سمك",
+    "fish-aquarium-supplies-new",
+    "aquarium",
+    "fish tank",
+    "fish supplies"
+  ],
+  "small-animals-supplies": [
+    "مستلزمات الحيوانات الصغيرة",
+    "small-animals-supplies",
+    "small animal supplies",
+    "hamster cage"
+  ],
+  "pet-health-veterinary": [
+    "صحة وعلاجات بيطرية",
+    "بيطري",
+    "pet-health-veterinary",
+    "veterinary",
+    "vet",
+    "pet health"
+  ],
+  "pet-grooming-hygiene-new": [
+    "العناية والنظافة",
+    "حلاقة حيوانات",
+    "pet-grooming-hygiene-new",
+    "pet grooming",
+    "pet shampoo"
+  ],
+  "pet-toys-entertainment-new": [
+    "ألعاب حيوانات أليفة",
+    "pet-toys-entertainment-new",
+    "pet toys",
+    "cat toys",
+    "dog toys"
+  ],
+  "pet-accessories-gear": [
+    "اكسسوارات حيوانات أليفة",
+    "طوق",
+    "ليش",
+    "pet-accessories-gear",
+    "pet accessories",
+    "collar",
+    "leash",
+    "harness"
+  ],
+  "pet-training-behavior": [
+    "مستلزمات التدريب",
+    "تدريب كلاب",
+    "pet-training-behavior",
+    "pet training",
+    "dog training"
+  ],
+  "pet-housing-habitats": [
+    "بيوت وأقفاص",
+    "قفص",
+    "بيت كلب",
+    "pet-housing-habitats",
+    "cages",
+    "kennels",
+    "pet houses",
+    "carriers"
+  ],
+  "pet-transportation": [
+    "مستلزمات التنقل والسفر",
+    "pet-transportation",
+    "pet travel",
+    "pet carrier"
+  ],
+  "pet-safety-security": [
+    "مستلزمات الأمان والسلامة",
+    "pet-safety-security",
+    "pet safety"
+  ],
+  "exotic-pets-supplies": [
+    "مستلزمات الحيوانات النادرة",
+    "exotic-pets-supplies",
+    "exotic pet supplies"
+  ],
+  "pediatric-medications": [
+    "أدوية الأطفال",
+    "pediatric-medications",
+    "pediatric medicine",
+    "baby medicine"
+  ],
+  "pediatric-vitamins": [
+    "فيتامينات الأطفال",
+    "pediatric-vitamins",
+    "kids vitamins",
+    "baby vitamins"
+  ],
+  "blood-pressure-monitors": [
+    "أجهزة قياس الضغط",
+    "جهاز ضغط",
+    "blood-pressure-monitors",
+    "blood pressure monitor",
+    "bp monitor"
+  ],
+  "thermometers": [
+    "موازين حرارة طبية",
+    "ميزان حرارة",
+    "thermometers",
+    "thermometer",
+    "fever"
+  ],
+  "glucose-meters": [
+    "أجهزة قياس السكر",
+    "جهاز سكر",
+    "glucose-meters",
+    "glucose meter",
+    "blood sugar monitor"
+  ],
+  "pulse-oximeters": [
+    "أجهزة قياس الأكسجة",
+    "pulse-oximeters",
+    "pulse oximeter",
+    "oxygen monitor"
+  ],
+  "multivitamins": [
+    "ملتي فيتامين (فيتامينات متعددة)",
+    "multivitamins",
+    "multivitamin",
+    "multi vitamin"
+  ],
+  "minerals-trace-elements": [
+    "معادن",
+    "زنك",
+    "حديد",
+    "مغنيسيوم",
+    "minerals-trace-elements",
+    "minerals",
+    "zinc",
+    "iron",
+    "magnesium"
+  ],
+  "herbal-supplements": [
+    "مكملات عشبية",
+    "أعشاب",
+    "herbal-supplements",
+    "herbal",
+    "herbs"
+  ],
+  "first-aid-kits": [
+    "شنط إسعافات أولية",
+    "إسعافات أولية",
+    "first-aid-kits",
+    "first aid kit",
+    "emergency kit"
+  ],
+  "bandages-wound-care": [
+    "شاش وضمادات للجروح",
+    "لصق جروح",
+    "bandages-wound-care",
+    "bandages",
+    "wound care",
+    "gauze"
+  ],
+  "emergency-medications": [
+    "أدوية للحالات الطارئة",
+    "emergency-medications",
+    "emergency medicine"
+  ],
+  "wheelchairs": [
+    "كراسي متحركة (عجلات)",
+    "كرسي متحرك",
+    "wheelchairs",
+    "wheelchair"
+  ],
+  "walkers-mobility-aids": [
+    "ووكر (مشايات)",
+    "مشاية",
+    "walkers-mobility-aids",
+    "walkers",
+    "mobility aids"
+  ],
+  "canes-crutches": [
+    "عكازات وعصي طبية",
+    "عكاز",
+    "canes-crutches",
+    "canes",
+    "crutches",
+    "walking stick"
+  ],
+  "protein-sports-nutrition": [
+    "بروتين ومكملات رياضية",
+    "واي بروتين",
+    "كرياتين",
+    "protein-sports-nutrition",
+    "protein",
+    "whey protein",
+    "creatine",
+    "sports nutrition"
+  ],
+  "personal-care-hygiene": [
+    "عناية شخصية ونظافة صحية",
+    "personal-care-hygiene",
+    "personal care",
+    "hygiene products"
+  ],
+  "medical-supplies-consumables": [
+    "مستلزمات ومستهلكات طبية",
+    "قفازات",
+    "كمامات",
+    "medical-supplies-consumables",
+    "medical supplies",
+    "consumables",
+    "gloves",
+    "masks"
+  ],
+  "maternal-baby-health": [
+    "صحة الأم والطفل",
+    "maternal-baby-health",
+    "maternal health",
+    "mother care"
+  ],
+  "senior-care-support": [
+    "رعاية كبار السن",
+    "senior-care-support",
+    "senior care",
+    "elderly care"
+  ],
+  "therapeutic-rehabilitation": [
+    "علاج طبيعي وتأهيل",
+    "علاج فيزيائي",
+    "therapeutic-rehabilitation",
+    "physical therapy",
+    "rehabilitation",
+    "physiotherapy"
+  ],
+  "mental-health-therapy": [
+    "صحة نفسية واسترخاء",
+    "علاج نفسي",
+    "mental-health-therapy",
+    "mental health",
+    "therapy",
+    "psychology"
+  ],
+  "diagnostic-testing": [
+    "فحوصات وتشخيص",
+    "تحاليل",
+    "diagnostic-testing",
+    "diagnostics",
+    "medical tests",
+    "blood test"
+  ],
+  "alternative-natural-health": [
+    "صحة طبيعية وبديلة",
+    "طب بديل",
+    "alternative-natural-health",
+    "alternative medicine",
+    "homeopathy"
+  ],
+  "professional-medical-equipment": [
+    "تجهيزات طبية احترافية",
+    "معدات طبية",
+    "professional-medical-equipment",
+    "medical equipment",
+    "hospital equipment"
+  ],
+  "iphone": [
+    "آيفون",
+    "ايفون",
+    "iphone",
+    "iphone 13",
+    "iphone 14",
+    "iphone 15",
+    "pro max"
+  ],
+  "samsung-galaxy": [
+    "سامسونغ جالاكسي",
+    "سامسونج جالكسي",
+    "جالكسي",
+    "samsung-galaxy",
+    "samsung galaxy",
+    "galaxy s",
+    "galaxy note"
+  ],
+  "xiaomi": [
+    "شاومي",
+    "xiaomi",
+    "mi",
+    "redmi",
+    "poco"
+  ],
+  "huawei": [
+    "هواوي",
+    "huawei",
+    "p series",
+    "mate"
+  ],
+  "honor": [
+    "هونر",
+    "honor"
+  ],
+  "oppo": [
+    "أوبو",
+    "اوبو",
+    "oppo",
+    "reno"
+  ],
+  "vivo": [
+    "فيفو",
+    "vivo"
+  ],
+  "oneplus": [
+    "ون بلس",
+    "oneplus"
+  ],
+  "nokia": [
+    "نوكيا",
+    "nokia"
+  ],
+  "other-smartphone-brands": [
+    "ماركات موبايلات تانية",
+    "موبايلات أخرى",
+    "other-smartphone-brands",
+    "other brands",
+    "realme",
+    "tecno",
+    "infinix"
+  ],
+  "phone-cases-covers": [
+    "كفرات وبيوت للموبايل",
+    "كفر",
+    "غطاء موبايل",
+    "جراب",
+    "phone-cases-covers",
+    "phone case",
+    "cover",
+    "mobile case"
+  ],
+  "chargers-cables": [
+    "شواحن وكابلات",
+    "شاحن",
+    "وصلة",
+    "كيبل",
+    "chargers-cables",
+    "chargers",
+    "cables",
+    "usb",
+    "type c",
+    "lightning cable"
+  ],
+  "screen-protectors": [
+    "لزقات حماية للشاشة",
+    "لزقة شاشة",
+    "حماية شاشة",
+    "screen-protectors",
+    "screen protector",
+    "tempered glass"
+  ],
+  "power-banks-portable-chargers": [
+    "باور بانك وشواحن محمولة",
+    "باوربانك",
+    "شاحن متنقل",
+    "power-banks-portable-chargers",
+    "power bank",
+    "portable charger"
+  ],
+  "phone-holders-mounts": [
+    "ستاندات وقواعد للموبايل",
+    "ستاند",
+    "حامل موبايل",
+    "phone-holders-mounts",
+    "phone holder",
+    "car mount",
+    "phone stand"
+  ],
+  "memory-cards-storage": [
+    "كروت ذاكرة وتخزين",
+    "ميموري",
+    "memory-cards-storage",
+    "memory card",
+    "sd card",
+    "microsd"
+  ],
+  "phone-parts-components": [
+    "قطع غيار للموبايلات",
+    "شاشة",
+    "بطارية موبايل",
+    "phone-parts-components",
+    "phone parts",
+    "mobile screen",
+    "mobile battery"
+  ],
+  "doctors-physicians": [
+    "وظائف أطباء",
+    "طبيب",
+    "دكتور",
+    "أخصائي",
+    "استشاري",
+    "doctors-physicians",
+    "doctors",
+    "physician",
+    "specialist",
+    "consultant",
+    "surgeon"
+  ],
+  "nursing-jobs": [
+    "وظائف تمريض",
+    "ممرض",
+    "ممرضة",
+    "nursing-jobs",
+    "nursing",
+    "nurse"
+  ],
+  "pharmacy-jobs": [
+    "وظائف صيدلة",
+    "صيدلي",
+    "مساعد صيدلي",
+    "pharmacy-jobs",
+    "pharmacy",
+    "pharmacist"
+  ],
+  "medical-support-staff": [
+    "وظائف دعم طبي",
+    "فني مختبر",
+    "فني أشعة",
+    "medical-support-staff",
+    "medical support",
+    "lab technician",
+    "medical assistant"
+  ],
+  "school-teachers": [
+    "وظائف تدريس في المدارس",
+    "مدرس",
+    "معلم",
+    "أستاذ",
+    "school-teachers",
+    "teacher",
+    "school teacher",
+    "educator",
+    "tutor"
+  ],
+  "university-faculty": [
+    "وظائف تدريس جامعي",
+    "أستاذ جامعي",
+    "محاضر",
+    "university-faculty",
+    "professor",
+    "lecturer",
+    "faculty"
+  ],
+  "training-development": [
+    "وظائف تدريب",
+    "مدرب",
+    "training-development",
+    "trainer",
+    "training and development",
+    "coach"
+  ],
+  "software-development": [
+    "وظائف تطوير برمجيات",
+    "مبرمج",
+    "مطور",
+    "software-development",
+    "software developer",
+    "programmer",
+    "software engineer",
+    "developer"
+  ],
+  "it-support-administration": [
+    "وظائف دعم فني وإدارة شبكات",
+    "مهندس شبكات",
+    "it-support-administration",
+    "it support",
+    "network administrator",
+    "system admin"
+  ],
+  "digital-marketing-design": [
+    "وظائف تسويق رقمي وتصميم",
+    "مسوق الكتروني",
+    "مصمم جرافيك",
+    "digital-marketing-design",
+    "digital marketer",
+    "graphic designer",
+    "social media manager"
+  ],
+  "sales-marketing": [
+    "وظائف مبيعات وتسويق",
+    "مندوب مبيعات",
+    "مدير مبيعات",
+    "تسويق",
+    "sales-marketing",
+    "sales",
+    "marketing",
+    "sales representative",
+    "account manager"
+  ],
+  "accounting-bookkeeping": [
+    "وظائف محاسبة",
+    "محاسب",
+    "مدير مالي",
+    "accounting-bookkeeping",
+    "accountant",
+    "accounting",
+    "bookkeeper",
+    "finance manager"
+  ],
+  "management-administration": [
+    "وظائف إدارة وسكرتاريا",
+    "مدير",
+    "سكرتيرة",
+    "إداري",
+    "management-administration",
+    "management",
+    "administration",
+    "manager",
+    "secretary",
+    "receptionist"
+  ],
+  "employment-services": [
+    "خدمات التوظيف",
+    "employment-services",
+    "employment agency",
+    "recruitment services"
+  ],
+  "engineering-construction": [
+    "وظائف هندسة وإنشاءات",
+    "مهندس",
+    "مهندس مدني",
+    "مهندس معماري",
+    "engineering-construction",
+    "engineer",
+    "civil engineer",
+    "architect",
+    "construction"
+  ],
+  "manufacturing-production": [
+    "وظائف صناعة وإنتاج",
+    "عامل مصنع",
+    "فني انتاج",
+    "manufacturing-production",
+    "manufacturing jobs",
+    "production worker",
+    "factory worker"
+  ],
+  "customer-service-support": [
+    "وظائف خدمة زبائن",
+    "خدمة عملاء",
+    "كول سنتر",
+    "customer-service-support",
+    "customer service",
+    "customer support",
+    "call center"
+  ],
+  "agriculture-food-industry": [
+    "وظائف زراعة وصناعات غذائية",
+    "مهندس زراعي",
+    "مزارع",
+    "agriculture-food-industry",
+    "agriculture jobs",
+    "farmer",
+    "agronomist"
+  ],
+  "transportation-logistics": [
+    "وظائف نقل وسواقة",
+    "سائق",
+    "سواق",
+    "transportation-logistics",
+    "driver",
+    "transportation",
+    "logistics",
+    "delivery driver"
+  ],
+  "hospitality-tourism": [
+    "وظائف مطاعم وفنادق",
+    "شيف",
+    "طباخ",
+    "ويتر",
+    "موظف استقبال",
+    "hospitality-tourism",
+    "hospitality",
+    "chef",
+    "cook",
+    "waiter",
+    "hotel jobs"
+  ],
+  "government-public-sector": [
+    "وظائف حكومية وقطاع عام",
+    "وظيفة حكومية",
+    "government-public-sector",
+    "government jobs",
+    "public sector"
+  ],
+  "training-professional-development": [
+    "دورات تدريبية وتطوير مهني",
+    "كورس",
+    "دورة",
+    "training-professional-development",
+    "training courses",
+    "professional development",
+    "workshops"
+  ],
+  "business-opportunities": [
+    "فرص استثمارية وتجارية",
+    "فرصة عمل",
+    "شريك",
+    "business-opportunities",
+    "business opportunity",
+    "investment",
+    "partnership",
+    "franchise"
+  ],
+  "self-propelled-machinery": [
+    "آليات ذاتية الدفع",
+    "جرار",
+    "حصادة",
+    "self-propelled-machinery",
+    "tractor",
+    "harvester",
+    "combine"
+  ],
+  "post-harvesting-equipment": [
+    "معدات ما بعد الحصاد",
+    "post-harvesting-equipment",
+    "post harvest",
+    "sorting machine",
+    "packing machine"
+  ],
+  "planting-seeding-equipment": [
+    "بذّارات وشتّالات",
+    "بذارة",
+    "planting-seeding-equipment",
+    "planter",
+    "seeder",
+    "planting machine"
+  ],
+  "tillage-equipment": [
+    "معدات حراثة وفلاحة",
+    "محراث",
+    "عزاقة",
+    "tillage-equipment",
+    "plow",
+    "tiller",
+    "cultivator",
+    "harrow"
+  ],
+  "seeds-planting-materials": [
+    "بذار وشتول",
+    "بذور",
+    "شتلات",
+    "seeds-planting-materials",
+    "seeds",
+    "seedlings",
+    "plants"
+  ],
+  "fertilizers-soil-amendments": [
+    "أسمدة ومخصبات زراعية",
+    "سماد",
+    "كيماوي",
+    "fertilizers-soil-amendments",
+    "fertilizer",
+    "soil",
+    "compost",
+    "manure"
+  ],
+  "farming-supplies-tools": [
+    "لوازم وأدوات زراعية",
+    "أدوات زراعة",
+    "farming-supplies-tools",
+    "farming tools",
+    "agriculture supplies",
+    "garden tools"
+  ],
+  "irrigation-systems-equipment": [
+    "شبكات ومعدات ري",
+    "رشاشات",
+    "خراطيم",
+    "مضخة ماء",
+    "irrigation-systems-equipment",
+    "irrigation",
+    "sprinklers",
+    "drip irrigation",
+    "water pump"
+  ],
+  "crop-protection-pesticides": [
+    "أدوية زراعية ومبيدات",
+    "مبيد حشري",
+    "مبيد فطري",
+    "crop-protection-pesticides",
+    "pesticides",
+    "insecticides",
+    "fungicides",
+    "herbicides"
+  ],
+  "animal-feed-nutrition": [
+    "أعلاف",
+    "علف",
+    "تبن",
+    "شعير",
+    "animal-feed-nutrition",
+    "animal feed",
+    "fodder",
+    "forage",
+    "hay"
+  ],
+  "greenhouse-nursery-supplies": [
+    "لوازم بيوت بلاستيكية ومشاتل",
+    "بيت بلاستيكي",
+    "greenhouse-nursery-supplies",
+    "greenhouse",
+    "nursery",
+    "polyhouse"
+  ],
+  "farm-buildings-infrastructure": [
+    "أبنية ومنشآت زراعية",
+    "حظيرة",
+    "farm-buildings-infrastructure",
+    "farm buildings",
+    "barn",
+    "shed",
+    "silo"
+  ],
+  "agricultural-services": [
+    "خدمات زراعية",
+    "agricultural-services",
+    "agricultural services",
+    "farming services"
+  ],
+  "organic-sustainable-farming": [
+    "زراعة عضوية",
+    "organic-sustainable-farming",
+    "organic farming",
+    "sustainable farming"
+  ],
+  "wedding-planning-coordination": [
+    "تنظيم وتنسيق أعراس",
+    "تنسيق حفلات",
+    "wedding-planning-coordination",
+    "wedding planning",
+    "wedding coordinator",
+    "event planner"
+  ],
+  "bridal-services-beauty": [
+    "تجهيز عروس",
+    "صالون عروس",
+    "مكياج عروس",
+    "bridal-services-beauty",
+    "bridal",
+    "bride",
+    "wedding makeup",
+    "bridal salon"
+  ],
+  "wedding-venues-halls": [
+    "صالات أفراح",
+    "قاعة أفراح",
+    "صالة",
+    "wedding-venues-halls",
+    "wedding venue",
+    "wedding hall",
+    "banquet hall"
+  ],
+  "wedding-photography-videography": [
+    "تصوير أعراس",
+    "تصوير زفاف",
+    "wedding-photography-videography",
+    "wedding photography",
+    "wedding video",
+    "wedding photographer"
+  ],
+  "live-music-bands": [
+    "فرق موسيقية وغنائية",
+    "فرقة",
+    "مطرب",
+    "live-music-bands",
+    "live music",
+    "band",
+    "singer",
+    "musicians"
+  ],
+  "dj-sound-services": [
+    "دي جي (DJ) وأجهزة صوت",
+    "دي جي",
+    "dj-sound-services",
+    "dj",
+    "sound system",
+    "audio services"
+  ],
+  "dancers-performers": [
+    "فرق استعراضية وراقصة",
+    "زفة",
+    "dancers-performers",
+    "dancers",
+    "performers",
+    "zaffa"
+  ],
+  "comedy-entertainment-acts": [
+    "فقرات كوميدية وترفيهية",
+    "ترفيه",
+    "comedy-entertainment-acts",
+    "entertainment",
+    "comedy",
+    "show"
+  ],
+  "conference-centers-meeting-rooms": [
+    "قاعات مؤتمرات واجتماعات",
+    "قاعة اجتماعات",
+    "conference-centers-meeting-rooms",
+    "conference center",
+    "meeting room",
+    "boardroom"
+  ],
+  "outdoor-event-spaces": [
+    "مزارع وأماكن مفتوحة",
+    "مزرعة للايجار",
+    "outdoor-event-spaces",
+    "outdoor venue",
+    "garden venue",
+    "farm rental"
+  ],
+  "private-party-venues": [
+    "صالات وقاعات خاصة",
+    "private-party-venues",
+    "private venue",
+    "party hall"
+  ],
+  "birthday-parties-celebrations": [
+    "حفلات أعياد ميلاد",
+    "عيد ميلاد",
+    "birthday-parties-celebrations",
+    "birthday",
+    "birthday party",
+    "celebration"
+  ],
+  "corporate-events-conferences": [
+    "مؤتمرات وفعاليات شركات",
+    "مؤتمر",
+    "corporate-events-conferences",
+    "corporate events",
+    "conference",
+    "seminar"
+  ],
+  "religious-cultural-events": [
+    "مناسبات دينية وثقافية",
+    "رمضان",
+    "عيد",
+    "religious-cultural-events",
+    "religious events",
+    "cultural events",
+    "ramadan",
+    "eid"
+  ],
+  "event-planning-services": [
+    "خدمات تنظيم مناسبات",
+    "event-planning-services",
+    "event services",
+    "organizer"
+  ],
+  "catering-food-services": [
+    "ضيافة وبوفيهات",
+    "ضيافة",
+    "كاترينج",
+    "catering-food-services",
+    "catering",
+    "food service",
+    "buffet"
+  ],
+  "photography-videography": [
+    "تصوير فوتوغرافي وفيديو",
+    "photography-videography",
+    "photography",
+    "videography"
+  ],
+  "music-dj-services": [
+    "دي جي وفرق موسيقية",
+    "music-dj-services",
+    "music",
+    "dj services"
+  ],
+  "decorations-party-supplies": [
+    "زينة وتجهيزات حفلات",
+    "بالونات",
+    "زينة",
+    "decorations-party-supplies",
+    "decorations",
+    "party supplies",
+    "balloons"
+  ],
+  "event-transportation-logistics": [
+    "سيارات للمناسبات ونقل",
+    "سيارة زفاف",
+    "event-transportation-logistics",
+    "event transport",
+    "wedding car",
+    "limousine"
+  ],
+  "special-occasions-holidays": [
+    "مناسبات خاصة وأعياد",
+    "special-occasions-holidays",
+    "special occasions",
+    "holidays"
+  ],
+  "childrens-events-parties": [
+    "حفلات أطفال",
+    "childrens-events-parties",
+    "kids parties",
+    "children's events"
+  ],
+  "graduation-academic-events": [
+    "حفلات تخرج",
+    "تخرج",
+    "graduation-academic-events",
+    "graduation",
+    "commencement"
+  ],
+  "refrigerators-freezers": [
+    "البرادات والفريزرات",
+    "براد",
+    "ثلاجة",
+    "فريزر",
+    "مبرد",
+    "refrigerators-freezers",
+    "refrigerator",
+    "fridge",
+    "freezer",
+    "cooler"
+  ],
+  "cooking-appliances": [
+    "أجهزة الطبخ",
+    "فرن",
+    "غاز",
+    "بوتاجاز",
+    "ميكرويف",
+    "طباخ",
+    "cooking-appliances",
+    "cooking",
+    "oven",
+    "stove",
+    "cooker",
+    "microwave",
+    "range"
+  ],
+  "fans-ventilation": [
+    "مراوح وتهوية",
+    "مروحة",
+    "شفاط",
+    "fans-ventilation",
+    "fan",
+    "fans",
+    "ventilation",
+    "exhaust fan"
+  ],
+  "air-coolers-evaporative-coolers": [
+    "مبردات هوا",
+    "مكيف صحراوي",
+    "air-coolers-evaporative-coolers",
+    "air cooler",
+    "evaporative cooler"
+  ],
+  "air-conditioners": [
+    "مكيفات هواء",
+    "مكيف",
+    "كونديشن",
+    "سبليت",
+    "air-conditioners",
+    "air conditioner",
+    "ac",
+    "a/c",
+    "split unit",
+    "hvac"
+  ],
+  "vacuum-cleaners": [
+    "مكانس كهربائية",
+    "مكنسة",
+    "vacuum-cleaners",
+    "vacuum cleaner",
+    "hoover",
+    "vacuum"
+  ],
+  "steam-cleaners": [
+    "منظفات بخار",
+    "مكنسة بخار",
+    "steam-cleaners",
+    "steam cleaner",
+    "steamer"
+  ],
+  "robot-vacuums": [
+    "مكانس روبوت",
+    "robot-vacuums",
+    "robot vacuum",
+    "robotic vacuum",
+    "roomba"
+  ],
+  "hair-care-appliances": [
+    "مجففات ومصففات الشعر",
+    "ليس",
+    "hair-care-appliances",
+    "hair dryer",
+    "hair straightener",
+    "curling iron"
+  ],
+  "shavers": [
+    "ماكينات حلاقة",
+    "ماكينة حلاقة",
+    "shavers",
+    "shaver",
+    "trimmer",
+    "electric shaver"
+  ],
+  "electric-water-heaters": [
+    "سخانات مياه كهربائية",
+    "سخان كهرباء",
+    "كيزر",
+    "electric-water-heaters",
+    "electric water heater",
+    "boiler",
+    "geyser"
+  ],
+  "gas-water-heaters": [
+    "سخانات مياه غاز",
+    "سخان غاز",
+    "gas-water-heaters",
+    "gas water heater",
+    "gas boiler"
+  ],
+  "solar-water-heaters": [
+    "سخانات مياه شمسية",
+    "سخان شمسي",
+    "solar-water-heaters",
+    "solar water heater",
+    "solar geyser"
+  ],
+  "instant-water-heaters": [
+    "سخانات مياه فورية",
+    "سخان فوري",
+    "instant-water-heaters",
+    "instant water heater",
+    "tankless water heater"
+  ],
+  "power-generators": [
+    "مولدات كهربائية",
+    "مولد",
+    "power-generators",
+    "generator",
+    "power generator",
+    "genset"
+  ],
+  "ups-devices": [
+    "أجهزة يو بي إس",
+    "يو بي اس",
+    "ups-devices",
+    "ups",
+    "uninterruptible power supply"
+  ],
+  "power-banks": [
+    "باور بانك",
+    "شاحن سفري",
+    "power-banks",
+    "power bank",
+    "portable charger"
+  ],
+  "laundry-appliances": [
+    "الغسالات والنشافات",
+    "غسالة",
+    "نشافة",
+    "مجفف",
+    "laundry-appliances",
+    "washing machine",
+    "washer",
+    "dryer",
+    "laundry",
+    "tumble dryer"
+  ],
+  "heating-appliances": [
+    "أجهزة التدفئة",
+    "صوبة",
+    "دفاية",
+    "تدفئة",
+    "heating-appliances",
+    "heater",
+    "heating",
+    "radiator",
+    "stove"
+  ],
+  "home-entertainment-electronics": [
+    "إلكترونيات الترفيه المنزلي",
+    "تلفزيون",
+    "شاشة",
+    "رسيفر",
+    "home-entertainment-electronics",
+    "tv",
+    "television",
+    "home theater",
+    "audio system",
+    "receiver"
+  ],
+  "smart-home-devices": [
+    "أجهزة البيت الذكي",
+    "منزل ذكي",
+    "smart-home-devices",
+    "smart home",
+    "smart devices",
+    "iot",
+    "alexa",
+    "google home"
+  ],
+  "appliance-parts-accessories": [
+    "قطع غيار واكسسوارات",
+    "appliance-parts-accessories",
+    "appliance parts",
+    "spare parts"
+  ],
+  "cattle-dairy": [
+    "أبقار",
+    "بقر",
+    "بقرة",
+    "عجل",
+    "ثور",
+    "جاموس",
+    "cattle-dairy",
+    "cattle",
+    "cows",
+    "cow",
+    "bull",
+    "calf",
+    "dairy"
+  ],
+  "sheep-goats": [
+    "أغنام وماعز",
+    "غنم",
+    "خروف",
+    "ماعز",
+    "عنزة",
+    "تيس",
+    "كباش",
+    "sheep-goats",
+    "sheep",
+    "goats",
+    "lamb",
+    "ram",
+    "ewe"
+  ],
+  "horses-equine": [
+    "خيول",
+    "خيل",
+    "حصان",
+    "فرس",
+    "مهر",
+    "horses-equine",
+    "horses",
+    "horse",
+    "mare",
+    "stallion",
+    "pony",
+    "foal"
+  ],
+  "poultry-birds": [
+    "دواجن (فروج)",
+    "دواجن",
+    "فروج",
+    "دجاج",
+    "صيصان",
+    "بط",
+    "وز",
+    "poultry-birds",
+    "poultry",
+    "chicken",
+    "chickens",
+    "rooster",
+    "hens",
+    "ducks"
+  ]
+}

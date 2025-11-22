@@ -374,8 +374,9 @@ class MarketplaceSearchService {
 
     const normalized = {};
 
-    // Category filtering - use slug if available, otherwise map
-    if (params.category) {
+    // Category filtering - support both 'category' and 'categorySlug' field names
+    const categoryInput = params.category || params.categorySlug;
+    if (categoryInput) {
       const categoryMap = {
         'vehicles': 'vehicles',
         'real-estate': 'real-estate',
@@ -388,7 +389,8 @@ class MarketplaceSearchService {
         'houses': 'houses',
         'villas': 'villas'
       };
-      normalized.categorySlug = categoryMap[params.category.toLowerCase()] || params.category;
+      normalized.categorySlug = categoryMap[categoryInput.toLowerCase()] || categoryInput;
+      console.log(`📂 [NORMALIZE] Category detected: "${categoryInput}" → "${normalized.categorySlug}"`);
     }
 
     // ============================================================================
@@ -497,8 +499,12 @@ class MarketplaceSearchService {
     // END LOCATION FIX
     // ============================================================================
 
-    // Transaction type
-    if (params.transactionType) normalized.transactionTypeSlug = params.transactionType.toLowerCase();
+    // Transaction type - support both field names
+    const transactionInput = params.transactionType || params.transactionTypeSlug;
+    if (transactionInput) {
+      normalized.transactionTypeSlug = transactionInput.toLowerCase();
+      console.log(`💱 [NORMALIZE] Transaction type: "${transactionInput}"`);
+    }
 
     // Price filtering
     if (params.minPrice || params.maxPrice) {
@@ -519,7 +525,8 @@ class MarketplaceSearchService {
     }
 
     // Vehicle attributes
-    if (params.category && ['vehicles', 'cars'].includes(params.category.toLowerCase())) {
+    const catForVehicleCheck = params.category || params.categorySlug;
+    if (catForVehicleCheck && ['vehicles', 'cars'].includes(catForVehicleCheck.toLowerCase())) {
       const attr = {};
       if (params.carBrand) attr.brand = params.carBrand;
       if (params.carModel) attr.model = params.carModel;

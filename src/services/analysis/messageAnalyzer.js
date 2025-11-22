@@ -1,5 +1,7 @@
 const dynamicDataManager = require('../data/dynamicDataManager');
 const logger = require('../../utils/logger');
+const fs = require('fs');
+const path = require('path');
 
 /**
  * Dynamic Message Analyzer
@@ -12,34 +14,9 @@ class MessageAnalyzer {
     // LEAF CATEGORY KEYWORDS
     // Maps Arabic/English keywords to SPECIFIC leaf category slugs
     // These help identify specific categories even when API data is incomplete
+    // Loaded from categoryKeywords.json file
     // ============================================================================
-    this.leafCategoryKeywords = {
-      // Real Estate - LEAF categories (not "real-estate")
-      'houses': ['بيت', 'بيوت', 'منزل', 'منازل', 'دار', 'house', 'houses', 'home', 'homes'],
-      'apartments': ['شقة', 'شقق', 'apartment', 'apartments', 'flat', 'flats'],
-      'villas': ['فيلا', 'فيلات', 'villa', 'villas'],
-      'lands': ['أرض', 'ارض', 'أراضي', 'اراضي', 'land', 'lands', 'plot'],
-      'agricultural-lands': ['أرض زراعية', 'ارض زراعية', 'زراعي', 'زراعية', 'agricultural'],
-      'commercial-lands': ['أرض تجارية', 'ارض تجارية', 'تجاري', 'تجارية'],
-      'offices': ['مكتب', 'مكاتب', 'office', 'offices'],
-      'shops': ['محل', 'محلات', 'دكان', 'دكاكين', 'shop', 'shops', 'store', 'stores'],
-      'warehouses': ['مستودع', 'مستودعات', 'مخزن', 'مخازن', 'warehouse', 'warehouses'],
-
-      // Vehicles - LEAF categories (not "vehicles")
-      'cars': ['سيارة', 'سيارات', 'car', 'cars', 'automobile'],
-      'motorcycles': ['دراجة نارية', 'دراجات نارية', 'موتور', 'موتوسيكل', 'motorcycle', 'motorcycles', 'motorbike'],
-      'trucks': ['شاحنة', 'شاحنات', 'تريلا', 'truck', 'trucks', 'lorry'],
-      'buses': ['باص', 'باصات', 'حافلة', 'حافلات', 'bus', 'buses'],
-
-      // Electronics
-      'mobiles': ['موبايل', 'موبايلات', 'جوال', 'هاتف', 'mobile', 'phone', 'smartphone'],
-      'laptops': ['لابتوب', 'لابتوبات', 'حاسوب محمول', 'laptop', 'laptops', 'notebook'],
-      'tablets': ['تابلت', 'آيباد', 'tablet', 'ipad'],
-      'computers': ['كمبيوتر', 'حاسوب', 'computer', 'desktop', 'pc'],
-
-      // Furniture
-      'furniture': ['أثاث', 'اثاث', 'موبيليا', 'furniture']
-    };
+    this.leafCategoryKeywords = this.loadCategoryKeywords();
 
     // Build reverse lookup: keyword -> category
     this.keywordToCategory = {};
@@ -97,6 +74,65 @@ class MessageAnalyzer {
       elevator: { positive: /مصعد|elevator|lift/i },
       balcony: { positive: /بلكون[ة]?|شرفة|balcony/i },
       ac: { positive: /تكييف|مكيف|ac|air\s*condition/i }
+    };
+  }
+
+  /**
+   * Load category keywords from JSON file
+   * Falls back to default keywords if file doesn't exist
+   * @returns {Object} Category keywords mapping
+   */
+  loadCategoryKeywords() {
+    const keywordsPath = path.join(__dirname, '..', 'data', 'categoryKeywords.json');
+    
+    try {
+      if (fs.existsSync(keywordsPath)) {
+        const fileContent = fs.readFileSync(keywordsPath, 'utf8');
+        const keywords = JSON.parse(fileContent);
+        console.log(`✅ [ANALYZER] Loaded ${Object.keys(keywords).length} category keywords from file`);
+        return keywords;
+      } else {
+        console.log('⚠️ [ANALYZER] categoryKeywords.json not found, using default keywords');
+        return this.getDefaultKeywords();
+      }
+    } catch (error) {
+      console.error('❌ [ANALYZER] Error loading category keywords:', error.message);
+      console.log('⚠️ [ANALYZER] Falling back to default keywords');
+      return this.getDefaultKeywords();
+    }
+  }
+
+  /**
+   * Get default category keywords (fallback)
+   * @returns {Object} Default category keywords
+   */
+  getDefaultKeywords() {
+    return {
+      // Real Estate - LEAF categories (not "real-estate")
+      'houses': ['بيت', 'بيوت', 'منزل', 'منازل', 'دار', 'house', 'houses', 'home', 'homes'],
+      'apartments': ['شقة', 'شقق', 'apartment', 'apartments', 'flat', 'flats'],
+      'villas': ['فيلا', 'فيلات', 'villa', 'villas'],
+      'lands': ['أرض', 'ارض', 'أراضي', 'اراضي', 'land', 'lands', 'plot'],
+      'agricultural-lands': ['أرض زراعية', 'ارض زراعية', 'زراعي', 'زراعية', 'agricultural'],
+      'commercial-lands': ['أرض تجارية', 'ارض تجارية', 'تجاري', 'تجارية'],
+      'offices': ['مكتب', 'مكاتب', 'office', 'offices'],
+      'shops': ['محل', 'محلات', 'دكان', 'دكاكين', 'shop', 'shops', 'store', 'stores'],
+      'warehouses': ['مستودع', 'مستودعات', 'مخزن', 'مخازن', 'warehouse', 'warehouses'],
+
+      // Vehicles - LEAF categories (not "vehicles")
+      'cars': ['سيارة', 'سيارات', 'car', 'cars', 'automobile'],
+      'motorcycles': ['دراجة نارية', 'دراجات نارية', 'موتور', 'موتوسيكل', 'motorcycle', 'motorcycles', 'motorbike'],
+      'trucks': ['شاحنة', 'شاحنات', 'تريلا', 'truck', 'trucks', 'lorry'],
+      'buses': ['باص', 'باصات', 'حافلة', 'حافلات', 'bus', 'buses'],
+
+      // Electronics
+      'mobiles': ['موبايل', 'موبايلات', 'جوال', 'هاتف', 'mobile', 'phone', 'smartphone'],
+      'laptops': ['لابتوب', 'لابتوبات', 'حاسوب محمول', 'laptop', 'laptops', 'notebook'],
+      'tablets': ['تابلت', 'آيباد', 'tablet', 'ipad'],
+      'computers': ['كمبيوتر', 'حاسوب', 'computer', 'desktop', 'pc'],
+
+      // Furniture
+      'furniture': ['أثاث', 'اثاث', 'موبيليا', 'furniture']
     };
   }
 

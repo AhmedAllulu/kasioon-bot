@@ -425,19 +425,19 @@ class ResponseFormatter {
 
     // City aliases map (Arabic/English variations)
     const cityAliases = {
-      'damascus': ['دمشق', 'dimashq', 'الشام'],
-      'aleppo': ['حلب', 'halab', 'haleb'],
-      'homs': ['حمص', 'hims'],
-      'latakia': ['اللاذقية', 'lattakia', 'ladhiqiyah'],
-      'hama': ['حماه', 'حماة', 'hamah'],
-      'tartus': ['طرطوس', 'tartous'],
-      'idlib': ['إدلب', 'ادلب'],
-      'deir ez-zor': ['دير الزور', 'ديرالزور', 'deir ezzor'],
-      'raqqa': ['الرقة', 'رقة'],
-      'daraa': ['درعا', 'دارا'],
-      'quneitra': ['القنيطرة', 'قنيطرة'],
-      'sweida': ['السويداء', 'سويداء'],
-      'hasakah': ['الحسكة', 'حسكة']
+      'damascus': ['دمشق', 'dimashq', 'الشام', 'Damascus', 'Damascus Syria'],
+      'aleppo': ['حلب', 'halab', 'haleb', 'Aleppo', 'Aleppo Syria'],
+      'homs': ['حمص', 'hims', 'Homs', 'Homs Syria', 'Homs, Syria'],
+      'latakia': ['اللاذقية', 'lattakia', 'ladhiqiyah', 'Latakia', 'Latakia Syria', 'Latakia, Syria'],
+      'hama': ['حماه', 'حماة', 'hamah', 'Hama', 'Hama Syria', 'Hama, Syria'],
+      'tartus': ['طرطوس', 'tartous', 'Tartus', 'Tartus Syria', 'Tartus, Syria'],
+      'idlib': ['إدلب', 'ادلب', 'Idlib', 'Idlib Syria', 'Idlib, Syria'],
+      'deir ez-zor': ['دير الزور', 'ديرالزور', 'deir ezzor', 'Deir ez-Zor Syria', 'Deir ez-Zor, Syria'],
+      'raqqa': ['الرقة', 'رقة', 'Raqqa', 'Raqqa Syria', 'Raqqa, Syria'  , 'Raqqa, Syria'],
+      'daraa': ['درعا', 'دارا', 'Daraa', 'Daraa Syria', 'Daraa, Syria'],
+      'quneitra': ['القنيطرة', 'قنيطرة', 'Quneitra', 'Quneitra Syria', 'Quneitra, Syria'  ],
+      'sweida': ['السويداء', 'سويداء', 'Suwayda', 'Suwayda Syria', 'Suwayda, Syria' ],
+      'hasakah': ['الحسكة', 'حسكة', 'Hasakah', 'Hasakah Syria', 'Hasakah, Syria' ],
     };
 
     // Check if both locations refer to the same city using aliases

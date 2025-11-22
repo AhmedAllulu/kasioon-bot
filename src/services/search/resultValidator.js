@@ -44,6 +44,31 @@ class ResultValidator {
 
     logger.info(`[ResultValidator] Validating ${results.length} results`);
 
+    // 🚫 Filter out results belonging to other categories (strict requirement)
+    if (searchParams && searchParams.category) {
+      const beforeCount = results.length;
+      results = results.filter(r => {
+        const resultCategory = r.category?.slug || r.category?.name || '';
+        return this.categoriesMatch(resultCategory, searchParams.category);
+      });
+
+      // If nothing matches after filtering, treat as no valid results
+      if (results.length === 0) {
+        logger.warn('[ResultValidator] No results remain after category filtering');
+        return {
+          isValid: false,
+          validResults: [],
+          warnings: [],
+          suggestions: this.getNoResultsSuggestions(searchParams, language),
+          qualityScore: 0
+        };
+      }
+
+      if (beforeCount !== results.length) {
+        logger.info(`[ResultValidator] Removed ${beforeCount - results.length} results from non-matching categories`);
+      }
+    }
+
     // فصل النتائج حسب جودة التطابق
     const categorizedResults = this.categorizeResults(results);
     const validationResult = {
@@ -317,14 +342,19 @@ class ResultValidator {
 
     // خريطة المدن المترادفة
     const cityAliases = {
-      'damascus': ['دمشق', 'dimashq', 'الشام'],
-      'aleppo': ['حلب', 'halab', 'haleb'],
-      'homs': ['حمص', 'hims'],
-      'latakia': ['اللاذقية', 'lattakia', 'ladhiqiyah'],
-      'hama': ['حماه', 'حماة', 'hamah'],
-      'tartus': ['طرطوس', 'tartous'],
-      'idlib': ['إدلب', 'ادلب'],
-      'deir ez-zor': ['دير الزور', 'ديرالزور', 'deir ezzor'],
+      'damascus': ['دمشق', 'dimashq', 'الشام', 'Damascus', 'Damascus Syria'],
+      'aleppo': ['حلب', 'halab', 'haleb', 'Aleppo', 'Aleppo Syria'],
+      'homs': ['حمص', 'hims', 'Homs', 'Homs Syria', 'Homs, Syria'],
+      'latakia': ['اللاذقية', 'lattakia', 'ladhiqiyah', 'Latakia', 'Latakia Syria', 'Latakia, Syria'],
+      'hama': ['حماه', 'حماة', 'hamah', 'Hama', 'Hama Syria', 'Hama, Syria'],
+      'tartus': ['طرطوس', 'tartous', 'Tartus', 'Tartus Syria', 'Tartus, Syria'],
+      'idlib': ['إدلب', 'ادلب', 'Idlib', 'Idlib Syria', 'Idlib, Syria'],
+      'deir ez-zor': ['دير الزور', 'ديرالزور', 'deir ezzor', 'Deir ez-Zor Syria', 'Deir ez-Zor, Syria'],
+      'raqqa': ['الرقة', 'رقة', 'Raqqa', 'Raqqa Syria', 'Raqqa, Syria'  , 'Raqqa, Syria'],
+      'daraa': ['درعا', 'دارا', 'Daraa', 'Daraa Syria', 'Daraa, Syria'],
+      'quneitra': ['القنيطرة', 'قنيطرة', 'Quneitra', 'Quneitra Syria', 'Quneitra, Syria'  ],
+      'sweida': ['السويداء', 'سويداء', 'Suwayda', 'Suwayda Syria', 'Suwayda, Syria' ],
+      'hasakah': ['الحسكة', 'حسكة', 'Hasakah', 'Hasakah Syria', 'Hasakah, Syria' ],
     };
 
     for (const [key, aliases] of Object.entries(cityAliases)) {

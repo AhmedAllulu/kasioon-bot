@@ -50,6 +50,27 @@ class MatchScorer {
     // 6. Completeness (10%)
     scores.completeness = this.calculateCompleteness(listing);
 
+    // 🚫 STRICT CATEGORY ENFORCEMENT:
+    // If user specified a category but listing is from a DIFFERENT category,
+    // exclude this result entirely (return 0 score)
+    // This prevents irrelevant results from appearing just because they have high completeness/keywords
+    const requestedCat = userParams.category || userParams.categorySlug;
+    if (requestedCat && scores.categoryMatch === 0) {
+      return {
+        matchScore: 0,
+        matchDetails: {
+          categoryMatch: 0,
+          locationMatch: 0,
+          filterMatch: 0,
+          attributeMatch: 0,
+          keywordRelevance: 0,
+          completeness: 0
+        },
+        excluded: true,
+        excludeReason: 'category_mismatch'
+      };
+    }
+
     // Calculate weighted total score
     const totalScore = Math.round(
       (scores.categoryMatch * weights.categoryMatch +
@@ -77,14 +98,16 @@ class MatchScorer {
    * Calculate category match score
    */
   static calculateCategoryMatch(listing, userParams) {
+    // Support both 'category' and 'categorySlug' field names
+    const requestedCategory = userParams.category || userParams.categorySlug;
+
     // If no category extracted from user query, use neutral score
     // This lets other criteria (keywords, etc.) determine relevance
-    if (!userParams.category) {
+    if (!requestedCategory) {
       return 50; // Neutral score - not perfect, not terrible
     }
 
     const listingCategory = listing.category_slug || listing.category?.slug || '';
-    const requestedCategory = userParams.category;
 
     // Exact match
     if (listingCategory === requestedCategory) {
