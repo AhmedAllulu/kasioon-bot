@@ -7,6 +7,7 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest",
+    "test:dynamic": "node test-dynamic-system.js",
     "lint": "eslint src/**/*.js"
   },
   "keywords": [

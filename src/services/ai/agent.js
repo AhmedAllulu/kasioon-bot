@@ -9,6 +9,11 @@ const FilterMatcher = require('./filterMatcher');
 const MatchScorer = require('./matchScorer');
 const ResultValidator = require('../search/resultValidator');
 
+// Dynamic analysis components
+const dynamicDataManager = require('../data/dynamicDataManager');
+const messageAnalyzer = require('../analysis/messageAnalyzer');
+const searchParamsBuilder = require('../search/searchParamsBuilder');
+
 /**
  * Detect language from text message
  * Returns 'ar' if Arabic characters are detected, 'en' otherwise
@@ -60,6 +65,67 @@ class AIAgent {
       hasAnthropic: !!this.anthropic,
       modelManager: 'enabled'
     });
+  }
+
+  /**
+   * Analyze message dynamically using fetched data from API
+   * This is the new 100% dynamic approach
+   * @param {string} userMessage - User message
+   * @param {string} language - Message language (ar/en)
+   * @returns {Promise<Object>} Extracted search parameters
+   */
+  async analyzeMessageDynamic(userMessage, language = 'ar') {
+    try {
+      console.log('🤖 [AI-AGENT] Starting dynamic analysis...');
+
+      // 1. Analyze message with dynamic analyzer
+      const analysis = await messageAnalyzer.analyze(userMessage, language);
+
+      // 2. If confidence is low, use AI fallback
+      if (analysis.confidence < 50) {
+        console.log('⚠️  [AI-AGENT] Low confidence, using AI fallback...');
+        const aiParams = await this.analyzeMessage(userMessage, language);
+
+        // Merge results
+        return this.mergeAnalysis(analysis, aiParams);
+      }
+
+      // 3. Build search parameters
+      const searchParams = searchParamsBuilder.build(analysis);
+
+      console.log('✅ [AI-AGENT] Dynamic analysis complete');
+      return searchParams;
+
+    } catch (error) {
+      console.error('❌ [AI-AGENT] Dynamic analysis error:', error);
+      // Fallback to traditional analysis
+      return this.analyzeMessage(userMessage, language);
+    }
+  }
+
+  /**
+   * Merge dynamic analysis with AI analysis
+   * @param {Object} dynamicResult - Result from dynamic analyzer
+   * @param {Object} aiResult - Result from AI
+   * @returns {Object} Merged result
+   */
+  mergeAnalysis(dynamicResult, aiResult) {
+    console.log('🔄 [AI-AGENT] Merging dynamic and AI results...');
+
+    // Convert dynamic result to search params format
+    const dynamicParams = searchParamsBuilder.build(dynamicResult);
+
+    // Merge with AI result, preferring dynamic where available
+    return {
+      category: dynamicParams.categorySlug || aiResult.category,
+      city: dynamicResult.location?.name || aiResult.city,
+      transactionType: dynamicParams.transactionTypeSlug || aiResult.transactionType,
+      keywords: dynamicParams.keywords || aiResult.keywords,
+      minPrice: dynamicParams['attributes.price.min'] || aiResult.minPrice,
+      maxPrice: dynamicParams['attributes.price.max'] || aiResult.maxPrice,
+      ...dynamicParams,
+      _source: 'merged'
+    };
   }
 
   /**

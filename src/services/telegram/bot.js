@@ -10,18 +10,54 @@ const intentClassifier = require('../ai/intentClassifier');
 const contextManager = require('../conversation/contextManager');
 const historyTracker = require('../conversation/historyTracker');
 
+// Dynamic data management
+const dynamicDataManager = require('../data/dynamicDataManager');
+
 class TelegramBot {
   constructor() {
     const token = process.env.TELEGRAM_BOT_TOKEN;
-    
+
     if (!token) {
       throw new Error('TELEGRAM_BOT_TOKEN is not set in environment variables');
     }
 
     console.log('🔑 Initializing Telegram bot with token:', token.substring(0, 10) + '...');
-    
+
     this.bot = new Telegraf(token);
     this.setupHandlers();
+
+    // Initialize dynamic data on startup
+    this.initializeData();
+  }
+
+  /**
+   * Initialize dynamic data from API
+   * Called on bot startup and refreshed periodically
+   */
+  async initializeData() {
+    try {
+      console.log('🚀 [BOT] Initializing dynamic data...');
+
+      // Load structure from API
+      await dynamicDataManager.loadStructure('ar');
+      await dynamicDataManager.getCategories('ar');
+
+      console.log('✅ [BOT] Dynamic data initialized');
+      console.log('📊 [BOT] Cache stats:', dynamicDataManager.getCacheStats());
+
+      // Schedule periodic refresh every 30 minutes
+      setInterval(async () => {
+        try {
+          await dynamicDataManager.refreshCache('ar');
+        } catch (error) {
+          console.error('❌ [BOT] Error refreshing cache:', error.message);
+        }
+      }, 30 * 60 * 1000);
+
+    } catch (error) {
+      console.error('❌ [BOT] Error initializing data:', error);
+      console.log('⚠️  [BOT] Bot will continue with limited functionality');
+    }
   }
 
   setupHandlers() {
@@ -353,6 +389,9 @@ Send a voice message and I'll understand
       );
 
       // Analyze message with AI
+      // NOTE: You can switch to dynamic analysis by using:
+      // const extractedParams = await aiAgent.analyzeMessageDynamic(userMessage, language);
+      // This uses 100% API-fetched data with AI fallback for low confidence results
       const extractedParams = await aiAgent.analyzeMessage(userMessage, language);
       logger.info('[AI] Extracted params:', extractedParams);
 
