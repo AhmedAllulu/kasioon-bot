@@ -13,7 +13,12 @@ class AudioProcessor {
    * @returns {Promise<Buffer>} Audio buffer
    */
   async downloadAudio(url) {
+    const startTime = Date.now();
     try {
+      console.log('📥 [AUDIO-DEBUG] Starting audio download...', {
+        url: url,
+        timeout: 30000
+      });
       logger.info('Downloading audio file from:', url);
 
       const response = await axios.get(url, {
@@ -21,14 +26,35 @@ class AudioProcessor {
         timeout: 30000
       });
 
+      console.log('📥 [AUDIO-DEBUG] HTTP response received:', {
+        status: response.status,
+        status_text: response.statusText,
+        content_type: response.headers['content-type'],
+        content_length: response.headers['content-length'],
+        download_time_ms: Date.now() - startTime
+      });
+
       const buffer = Buffer.from(response.data);
+      console.log('📥 [AUDIO-DEBUG] Audio buffer created:', {
+        buffer_size: buffer.length,
+        buffer_type: buffer.constructor.name,
+        total_time_ms: Date.now() - startTime
+      });
+      
       logger.info(`Audio downloaded: ${buffer.length} bytes`);
 
       return buffer;
 
     } catch (error) {
+      console.error('📥 [AUDIO-DEBUG] Download failed:', {
+        error_message: error.message,
+        error_code: error.code,
+        error_response_status: error.response?.status,
+        error_response_data: error.response?.data?.toString().substring(0, 100),
+        download_time_ms: Date.now() - startTime
+      });
       logger.error('Error downloading audio:', error);
-      throw new Error('Failed to download audio file');
+      throw new Error(`Failed to download audio file: ${error.message}`);
     }
   }
 

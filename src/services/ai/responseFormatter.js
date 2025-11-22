@@ -1,5 +1,6 @@
 const logger = require('../../utils/logger');
 const MatchScorer = require('./matchScorer');
+const arabicNormalizer = require('../../utils/arabicNormalizer');
 
 /**
  * Professional Response Formatter
@@ -75,11 +76,12 @@ class ResponseFormatter {
    * @param {Array} results - Search results from API
    * @param {string} language - Language code ('ar' or 'en')
    * @param {Object} pagination - Pagination info
+   * @param {Object} searchParams - Original search parameters from user query
    * @returns {string} Formatted message
    */
-  formatSearchResults(results, language = 'ar', pagination = null) {
+  formatSearchResults(results, language = 'ar', pagination = null, searchParams = null) {
     if (!results || results.length === 0) {
-      return this.getNoResultsMessage(language);
+      return this.getNoResultsMessage(language, searchParams);
     }
 
     const isArabic = language === 'ar';
@@ -88,6 +90,27 @@ class ResponseFormatter {
     // Header with variation
     const headerTemplate = this.getRandomVariation(this.successVariations[isArabic ? 'ar' : 'en']);
     message += headerTemplate.replace('{count}', results.length) + '\n\n';
+
+    // Add search parameters summary
+    if (searchParams) {
+      message += this.formatSearchParametersSummary(searchParams, language) + '\n';
+    }
+
+    // Check for location mismatch
+    if (searchParams && (searchParams.city || searchParams.province)) {
+      const requestedLocation = searchParams.province || searchParams.city;
+      const actualLocations = this.getUniqueResultLocations(results);
+
+      // Check if any actual location matches requested location using proper matching
+      const hasMatchingLocation = actualLocations.some(loc =>
+        this.locationsMatch(requestedLocation, loc)
+      );
+
+      // Show warning if no matching location found
+      if (!hasMatchingLocation && actualLocations.length > 0) {
+        message += this.formatLocationMismatchWarning(requestedLocation, actualLocations, language) + '\n\n';
+      }
+    }
 
     // Check for validation warnings (from ResultValidator)
     if (results[0]?._validation?.warnings?.length > 0) {
@@ -257,6 +280,216 @@ class ResponseFormatter {
   }
 
   /**
+   * Format search parameters summary for user transparency
+   * Shows what the bot understood from the user's query
+   * @param {Object} params - Extracted search parameters
+   * @param {string} language - Language code ('ar' or 'en')
+   * @returns {string} Formatted search parameters summary
+   */
+  formatSearchParametersSummary(params, language = 'ar') {
+    if (!params) return '';
+
+    const isArabic = language === 'ar';
+    const labels = {
+      ar: {
+        title: '🔍 معاملات البحث:',
+        type: '📦 النوع',
+        province: '🏙️ المحافظة',
+        city: '🏘️ المدينة',
+        price: '💰 السعر',
+        keywords: '🔑 كلمات',
+        notSpecified: 'غير محدد',
+        none: '-',
+        moreThan: 'أكثر من',
+        lessThan: 'أقل من'
+      },
+      en: {
+        title: '🔍 Search Parameters:',
+        type: '📦 Type',
+        province: '🏙️ Province',
+        city: '🏘️ City',
+        price: '💰 Price',
+        keywords: '🔑 Keywords',
+        notSpecified: 'Not specified',
+        none: '-',
+        moreThan: 'More than',
+        lessThan: 'Less than'
+      }
+    };
+
+    const l = labels[isArabic ? 'ar' : 'en'];
+    const lines = [l.title];
+
+    // Category/Type - check multiple possible field names
+    let category = l.notSpecified;
+    if (params.category) {
+      category = params.category.name || params.category;
+    } else if (params.categorySlug) {
+      category = params.categorySlug;
+    }
+    lines.push(`├─ ${l.type}: ${category}`);
+
+    // Location (Province/City) - check multiple possible field names
+    let location = l.notSpecified;
+    if (params.province) {
+      location = params.province;
+    } else if (params.city) {
+      location = params.city;
+    }
+    lines.push(`├─ ${l.province}: ${location}`);
+
+    // Price range
+    let priceStr = l.notSpecified;
+    if (params.minPrice && params.maxPrice) {
+      const minFormatted = this.formatNumber(params.minPrice, isArabic);
+      const maxFormatted = this.formatNumber(params.maxPrice, isArabic);
+      priceStr = `${minFormatted} - ${maxFormatted}`;
+    } else if (params.minPrice) {
+      const minFormatted = this.formatNumber(params.minPrice, isArabic);
+      priceStr = `${l.moreThan} ${minFormatted}`;
+    } else if (params.maxPrice) {
+      const maxFormatted = this.formatNumber(params.maxPrice, isArabic);
+      priceStr = `${l.lessThan} ${maxFormatted}`;
+    }
+    lines.push(`├─ ${l.price}: ${priceStr}`);
+
+    // Keywords
+    const keywords = params.keywords || params.query || l.none;
+    lines.push(`└─ ${l.keywords}: ${keywords}`);
+
+    return lines.join('\n') + '\n';
+  }
+
+  /**
+   * Extract unique locations from search results
+   * Checks multiple location field structures to ensure compatibility
+   * @param {Array} results - Search results array
+   * @returns {Array} Array of unique location names
+   */
+  getUniqueResultLocations(results) {
+    if (!results || results.length === 0) return [];
+
+    const locations = new Set();
+
+    for (const result of results) {
+      let locationName = null;
+
+      // Try different location field structures
+      if (result.location) {
+        if (typeof result.location === 'string') {
+          locationName = result.location;
+        } else if (result.location.city) {
+          // city can be string or object with name property
+          locationName = typeof result.location.city === 'string'
+            ? result.location.city
+            : result.location.city.name;
+        } else if (result.location.province) {
+          locationName = result.location.province;
+        }
+      } else if (result.city) {
+        // Fallback for direct city property
+        locationName = typeof result.city === 'string' ? result.city : result.city.name;
+      } else if (result.province) {
+        locationName = typeof result.province === 'string' ? result.province : result.province.name;
+      }
+
+      if (locationName) {
+        locations.add(locationName);
+      }
+    }
+
+    return Array.from(locations);
+  }
+
+  /**
+   * Check if two locations match (handles Arabic/English variations and aliases)
+   * Uses same logic as ResultValidator for consistency
+   * @param {string} location1 - First location
+   * @param {string} location2 - Second location
+   * @returns {boolean} True if locations match
+   */
+  locationsMatch(location1, location2) {
+    if (!location1 || !location2) return false;
+
+    // Normalize both locations for comparison
+    const normalized1 = arabicNormalizer.normalize(location1.toLowerCase());
+    const normalized2 = arabicNormalizer.normalize(location2.toLowerCase());
+
+    // Exact match
+    if (normalized1 === normalized2) return true;
+
+    // Partial match (one contains the other)
+    if (normalized1.includes(normalized2) || normalized2.includes(normalized1)) {
+      return true;
+    }
+
+    // City aliases map (Arabic/English variations)
+    const cityAliases = {
+      'damascus': ['دمشق', 'dimashq', 'الشام'],
+      'aleppo': ['حلب', 'halab', 'haleb'],
+      'homs': ['حمص', 'hims'],
+      'latakia': ['اللاذقية', 'lattakia', 'ladhiqiyah'],
+      'hama': ['حماه', 'حماة', 'hamah'],
+      'tartus': ['طرطوس', 'tartous'],
+      'idlib': ['إدلب', 'ادلب'],
+      'deir ez-zor': ['دير الزور', 'ديرالزور', 'deir ezzor'],
+      'raqqa': ['الرقة', 'رقة'],
+      'daraa': ['درعا', 'دارا'],
+      'quneitra': ['القنيطرة', 'قنيطرة'],
+      'sweida': ['السويداء', 'سويداء'],
+      'hasakah': ['الحسكة', 'حسكة']
+    };
+
+    // Check if both locations refer to the same city using aliases
+    for (const [key, aliases] of Object.entries(cityAliases)) {
+      const allVariations = [key, ...aliases];
+
+      if (allVariations.some(v => normalized1.includes(v)) &&
+          allVariations.some(v => normalized2.includes(v))) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Format warning when results are from different location than requested
+   * Helps users understand why they're seeing results from other cities
+   * @param {string} requestedLocation - Location user asked for
+   * @param {Array} actualLocations - Locations of actual results
+   * @param {string} language - Language code ('ar' or 'en')
+   * @returns {string} Warning message
+   */
+  formatLocationMismatchWarning(requestedLocation, actualLocations, language = 'ar') {
+    if (!requestedLocation || !actualLocations || actualLocations.length === 0) {
+      return '';
+    }
+
+    const isArabic = language === 'ar';
+
+    // Show up to 3 unique locations
+    const uniqueLocations = [...new Set(actualLocations)].slice(0, 3);
+    const locationsStr = uniqueLocations.join(isArabic ? '، ' : ', ');
+
+    if (isArabic) {
+      return `
+⚠️ لم نجد نتائج في "${requestedLocation}"
+📍 عرضنا لك نتائج من: ${locationsStr}
+💡 جرب البحث بدون تحديد المحافظة لمزيد من النتائج
+
+`.trim();
+    } else {
+      return `
+⚠️ No results found in "${requestedLocation}"
+📍 Showing results from: ${locationsStr}
+💡 Try searching without specifying province for more results
+
+`.trim();
+    }
+  }
+
+  /**
    * Get emoji for category
    * @param {string} categorySlug - Category slug
    * @returns {string} Emoji
@@ -362,47 +595,103 @@ class ResponseFormatter {
   }
 
   /**
-   * Get no results message
+   * Get no results message with search parameters context
    * @param {string} language - Language code
+   * @param {Object} searchParams - Original search parameters from user query
    * @returns {string} No results message
    */
-  getNoResultsMessage(language) {
+  getNoResultsMessage(language, searchParams = null) {
     const isArabic = language === 'ar';
 
     // Get random no results header
     const header = this.getRandomVariation(this.noResultsVariations[isArabic ? 'ar' : 'en']);
 
+    let message = `${header}\n\n`;
+
+    // Show what was searched for if parameters available
+    if (searchParams) {
+      message += this.formatSearchParametersSummary(searchParams, language) + '\n';
+    }
+
+    // Build parameter-specific suggestions
+    const suggestions = [];
+
+    if (searchParams) {
+      // Suggest removing price filter if set
+      if (searchParams.minPrice || searchParams.maxPrice) {
+        suggestions.push(isArabic
+          ? '• جرب إزالة فلتر السعر'
+          : '• Try removing the price filter'
+        );
+      }
+
+      // Suggest removing location filter if set
+      if (searchParams.city || searchParams.province) {
+        suggestions.push(isArabic
+          ? '• جرب البحث في محافظات أخرى'
+          : '• Try searching in other provinces'
+        );
+      }
+
+      // Suggest broader category if specific
+      if (searchParams.category || searchParams.categorySlug) {
+        suggestions.push(isArabic
+          ? '• جرب فئة أوسع'
+          : '• Try a broader category'
+        );
+      }
+
+      // Suggest using fewer keywords
+      if (searchParams.keywords || searchParams.query) {
+        suggestions.push(isArabic
+          ? '• استخدم كلمات أقل تحديداً'
+          : '• Use less specific keywords'
+        );
+      }
+    }
+
+    // Add generic suggestions if no parameter-specific ones
+    if (suggestions.length === 0) {
+      if (isArabic) {
+        suggestions.push(
+          '• جرب توسيع نطاق البحث',
+          '• استخدم كلمات أقل تحديداً',
+          '• جرب البحث في مدينة مختلفة',
+          '• تحقق من إملاء الكلمات'
+        );
+      } else {
+        suggestions.push(
+          '• Try broadening your search',
+          '• Use less specific keywords',
+          '• Try a different city',
+          '• Check your spelling'
+        );
+      }
+    }
+
+    // Add suggestions section
+    message += isArabic
+      ? `💡 *اقتراحات:*\n${suggestions.join('\n')}\n\n`
+      : `💡 *Suggestions:*\n${suggestions.join('\n')}\n\n`;
+
+    // Add search examples
     if (isArabic) {
-      return `${header}
-
-💡 *نصائح للحصول على نتائج أفضل:*
-• جرب توسيع نطاق البحث
-• استخدم كلمات أقل تحديداً
-• جرب البحث في مدينة مختلفة
-• تحقق من إملاء الكلمات
-
-🔄 *أمثلة للبحث:*
+      message += `🔄 *أمثلة للبحث:*
 "سيارات في دمشق"
 "شقق للإيجار"
 "موبايلات سامسونج"
 
 🌐 ${this.websiteUrl}`;
-    }
-
-    return `${header}
-
-💡 *Tips for better results:*
-• Try broadening your search
-• Use less specific keywords
-• Try a different city
-• Check your spelling
-
-🔄 *Search examples:*
+    } else {
+      message += `🔄 *Search examples:*
 "Cars in Damascus"
 "Apartments for rent"
 "Samsung phones"
 
 🌐 ${this.websiteUrl}`;
+    }
+
+    return message;
   }
 
   /**

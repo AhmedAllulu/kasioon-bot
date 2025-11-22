@@ -360,25 +360,24 @@ Send a voice message and I'll understand
       const searchResponse = await aiAgent.searchMarketplace(extractedParams, userMessage, language);
       const { results: filteredResults, filterDescription, matchedFilters } = searchResponse;
 
-      // Format response
+      // Format response with search parameters
       let formattedMessage;
       if (filteredResults.length > 0) {
-        formattedMessage = responseFormatter.formatSearchResults(filteredResults, language);
-
-        // Add filter description if filters were matched
-        if (filterDescription) {
-          const filterHeader = language === 'ar'
-            ? `\n🔍 *فلاتر البحث المطبقة:*\n${filterDescription}\n`
-            : `\n🔍 *Applied search filters:*\n${filterDescription}\n`;
-          formattedMessage = filterHeader + formattedMessage;
-        }
+        // Pass extractedParams to show search parameters summary
+        formattedMessage = responseFormatter.formatSearchResults(
+          filteredResults,
+          language,
+          null, // pagination
+          extractedParams // search parameters
+        );
 
         // Cache results if enough results
         if (filteredResults.length >= 3) {
           await searchHistory.cacheResults(userMessage, filteredResults);
         }
       } else {
-        formattedMessage = responseFormatter.getNoResultsMessage(language);
+        // Pass extractedParams to show what was searched for
+        formattedMessage = responseFormatter.getNoResultsMessage(language, extractedParams);
       }
 
       // Delete "searching" message and send results
@@ -415,36 +414,95 @@ Send a voice message and I'll understand
   }
 
   async handleVoiceMessage(ctx) {
+    const startTime = Date.now();
     try {
       const userId = ctx.from.id;
+      const voiceInfo = ctx.message.voice;
 
       console.log('🎤 [TELEGRAM] Processing voice message:', {
-        user_id: userId
+        user_id: userId,
+        file_id: voiceInfo?.file_id,
+        duration: voiceInfo?.duration,
+        file_size: voiceInfo?.file_size,
+        mime_type: voiceInfo?.mime_type
       });
 
-      logger.info(`Received voice message from user ${userId}`);
+      logger.info(`Received voice message from user ${userId}`, {
+        file_id: voiceInfo?.file_id,
+        duration: voiceInfo?.duration,
+        file_size: voiceInfo?.file_size
+      });
 
-      // Send typing action
+      // Step 1: Send typing action
+      console.log('🎤 [VOICE-DEBUG] Step 1: Sending typing action...');
       await ctx.sendChatAction('typing');
+      console.log('🎤 [VOICE-DEBUG] Step 1: Typing action sent');
 
-      // Get file link
-      const fileLink = await ctx.telegram.getFileLink(ctx.message.voice.file_id);
+      // Step 2: Get file link
+      console.log('🎤 [VOICE-DEBUG] Step 2: Getting file link...', {
+        file_id: voiceInfo?.file_id
+      });
+      let fileLink;
+      try {
+        fileLink = await ctx.telegram.getFileLink(ctx.message.voice.file_id);
+        console.log('🎤 [VOICE-DEBUG] Step 2: File link retrieved:', {
+          href: fileLink.href,
+          file_path: fileLink.file_path
+        });
+      } catch (error) {
+        console.error('🎤 [VOICE-DEBUG] Step 2 ERROR: Failed to get file link:', error);
+        logger.error('Failed to get file link:', error);
+        throw error;
+      }
       
-      // Download and process audio
-      const audioBuffer = await audioProcessor.downloadAudio(fileLink.href);
+      // Step 3: Download and process audio
+      console.log('🎤 [VOICE-DEBUG] Step 3: Downloading audio...', {
+        url: fileLink.href
+      });
+      let audioBuffer;
+      try {
+        audioBuffer = await audioProcessor.downloadAudio(fileLink.href);
+        console.log('🎤 [VOICE-DEBUG] Step 3: Audio downloaded successfully:', {
+          buffer_size: audioBuffer?.length,
+          buffer_type: typeof audioBuffer
+        });
+      } catch (error) {
+        console.error('🎤 [VOICE-DEBUG] Step 3 ERROR: Failed to download audio:', error);
+        logger.error('Failed to download audio:', error);
+        throw error;
+      }
       
-      // Transcribe audio
+      // Step 4: Transcribe audio
+      console.log('🎤 [VOICE-DEBUG] Step 4: Sending typing action before transcription...');
       await ctx.sendChatAction('typing');
-      const transcribedText = await aiAgent.transcribeAudio(audioBuffer);
+      console.log('🎤 [VOICE-DEBUG] Step 4: Starting audio transcription...', {
+        buffer_size: audioBuffer?.length
+      });
+      
+      let transcribedText;
+      try {
+        transcribedText = await aiAgent.transcribeAudio(audioBuffer);
+        console.log('🎤 [VOICE-DEBUG] Step 4: Transcription completed:', {
+          transcribed_text: transcribedText,
+          text_length: transcribedText?.length,
+          text_type: typeof transcribedText
+        });
+      } catch (error) {
+        console.error('🎤 [VOICE-DEBUG] Step 4 ERROR: Failed to transcribe audio:', error);
+        logger.error('Failed to transcribe audio:', error);
+        throw error;
+      }
 
       console.log('🎤 [TELEGRAM] Voice transcribed:', {
         user_id: userId,
-        transcribed_text: transcribedText
+        transcribed_text: transcribedText,
+        processing_time_ms: Date.now() - startTime
       });
 
       logger.info('Transcribed text:', transcribedText);
 
-      // Detect language from transcribed text
+      // Step 5: Detect language from transcribed text
+      console.log('🎤 [VOICE-DEBUG] Step 5: Detecting language...');
       const detectLanguage = (text) => {
         if (!text || typeof text !== 'string') return 'ar';
         const arabicPattern = /[\u0600-\u06FF]/;
@@ -457,21 +515,56 @@ Send a voice message and I'll understand
       };
       
       const detectedLanguage = detectLanguage(transcribedText);
+      console.log('🎤 [VOICE-DEBUG] Step 5: Language detected:', {
+        language: detectedLanguage,
+        text_preview: transcribedText?.substring(0, 50)
+      });
 
-      // Send transcription confirmation in detected language
+      // Step 6: Send transcription confirmation
+      console.log('🎤 [VOICE-DEBUG] Step 6: Sending confirmation message...');
       const confirmMessage = detectedLanguage === 'ar'
         ? `فهمت: "${transcribedText}"\n\nأبحث عن النتائج...`
         : `I understood: "${transcribedText}"\n\nSearching for results...`;
       
-      await ctx.reply(confirmMessage);
+      try {
+        await ctx.reply(confirmMessage);
+        console.log('🎤 [VOICE-DEBUG] Step 6: Confirmation message sent');
+      } catch (error) {
+        console.error('🎤 [VOICE-DEBUG] Step 6 ERROR: Failed to send confirmation:', error);
+        logger.error('Failed to send confirmation message:', error);
+        // Continue anyway
+      }
 
-      // Continue with regular text processing (which will detect language again)
+      // Step 7: Continue with regular text processing
+      console.log('🎤 [VOICE-DEBUG] Step 7: Processing as text message...', {
+        transcribed_text: transcribedText
+      });
       ctx.message.text = transcribedText;
-      await this.handleTextMessage(ctx);
+      
+      try {
+        await this.handleTextMessage(ctx);
+        console.log('🎤 [VOICE-DEBUG] Step 7: Text message processing completed');
+        console.log('🎤 [VOICE-DEBUG] Total processing time:', Date.now() - startTime, 'ms');
+      } catch (error) {
+        console.error('🎤 [VOICE-DEBUG] Step 7 ERROR: Failed to process text message:', error);
+        logger.error('Failed to process transcribed text message:', error);
+        throw error;
+      }
 
     } catch (error) {
+      console.error('🎤 [VOICE-DEBUG] FATAL ERROR in voice message handling:', {
+        error_message: error.message,
+        error_stack: error.stack,
+        processing_time_ms: Date.now() - startTime
+      });
       logger.error('Error handling voice message:', error);
-      ctx.reply('عذراً، لم أتمكن من معالجة الرسالة الصوتية. يرجى المحاولة مرة أخرى.\nSorry, I couldn\'t process the voice message. Please try again.');
+      
+      try {
+        await ctx.reply('عذراً، لم أتمكن من معالجة الرسالة الصوتية. يرجى المحاولة مرة أخرى.\nSorry, I couldn\'t process the voice message. Please try again.');
+      } catch (replyError) {
+        console.error('🎤 [VOICE-DEBUG] Failed to send error message:', replyError);
+        logger.error('Failed to send error message:', replyError);
+      }
     }
   }
 

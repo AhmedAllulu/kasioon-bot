@@ -786,27 +786,60 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
    * @returns {Promise<string>} Transcribed text
    */
   async transcribeAudio(audioBuffer) {
+    const startTime = Date.now();
     try {
+      console.log('🎙️ [TRANSCRIBE-DEBUG] Starting transcription...', {
+        buffer_size: audioBuffer?.length,
+        buffer_type: typeof audioBuffer,
+        has_openai: !!this.openai
+      });
+
       if (!this.openai) {
+        console.error('🎙️ [TRANSCRIBE-DEBUG] OpenAI client not initialized');
         throw new Error('OpenAI is required for audio transcription');
       }
 
       // Import toFile helper from openai package for proper file handling
       const { toFile } = require('openai');
 
+      console.log('🎙️ [TRANSCRIBE-DEBUG] Creating file object...');
       // Create proper file object for OpenAI API
       const file = await toFile(audioBuffer, 'audio.ogg', { type: 'audio/ogg' });
+      console.log('🎙️ [TRANSCRIBE-DEBUG] File object created:', {
+        file_name: file.name,
+        file_type: file.type,
+        file_size: file.size
+      });
 
+      console.log('🎙️ [TRANSCRIBE-DEBUG] Sending transcription request to OpenAI...', {
+        model: 'whisper-1'
+      });
       const response = await this.openai.audio.transcriptions.create({
         file: file,
         model: 'whisper-1'
         // Language auto-detection - Whisper handles this better without hardcoding
       });
 
+      console.log('🎙️ [TRANSCRIBE-DEBUG] Transcription response received:', {
+        has_text: !!response.text,
+        text_length: response.text?.length,
+        text_preview: response.text?.substring(0, 100),
+        transcription_time_ms: Date.now() - startTime
+      });
+
       logger.info('Audio transcribed successfully');
       return response.text;
 
     } catch (error) {
+      console.error('🎙️ [TRANSCRIBE-DEBUG] Transcription failed:', {
+        error_message: error.message,
+        error_type: error.constructor.name,
+        error_code: error.code,
+        error_status: error.status,
+        error_response: error.response?.data ? JSON.stringify(error.response.data).substring(0, 200) : undefined,
+        transcription_time_ms: Date.now() - startTime
+      });
+
       logger.error('Error transcribing audio:', error);
 
       // Provide more context in error messages
