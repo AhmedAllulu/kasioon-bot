@@ -69,7 +69,7 @@ class AIAgent {
 
   /**
    * Analyze message dynamically using fetched data from API
-   * This is the new 100% dynamic approach
+   * IMPROVED: Checks if category is LEAF and uses AI if not
    * @param {string} userMessage - User message
    * @param {string} language - Message language (ar/en)
    * @returns {Promise<Object>} Extracted search parameters
@@ -81,19 +81,56 @@ class AIAgent {
       // 1. Analyze message with dynamic analyzer
       const analysis = await messageAnalyzer.analyze(userMessage, language);
 
-      // 2. If confidence is low, use AI fallback
-      if (analysis.confidence < 50) {
-        console.log('⚠️  [AI-AGENT] Low confidence, using AI fallback...');
+      console.log('📊 [AI-AGENT] Analysis result:', {
+        category: analysis.category?.slug,
+        isLeaf: analysis.category?.isLeaf,
+        hasChildren: analysis.category?.hasChildren,
+        confidence: analysis.confidence
+      });
+
+      // 2. CRITICAL: If category is NOT a leaf (has children), use AI to find specific subcategory
+      if (analysis.category && !analysis.category.isLeaf) {
+        console.log('⚠️ [AI-AGENT] Category is NOT leaf, using AI to find specific subcategory...');
+        console.log(`   Current: ${analysis.category.slug} (has children)`);
+
         const aiParams = await this.analyzeMessage(userMessage, language);
 
-        // Merge results
+        // Check if AI returned a more specific (leaf) category
+        if (aiParams.category && aiParams.category !== analysis.category.slug) {
+          // Verify the AI category is indeed more specific
+          const isAiCategoryLeaf = dynamicDataManager.isLeafCategory(aiParams.category);
+
+          if (isAiCategoryLeaf) {
+            console.log(`✅ [AI-AGENT] AI found more specific category: ${aiParams.category} (leaf)`);
+            analysis.category = {
+              slug: aiParams.category,
+              isLeaf: true,
+              confidence: 85
+            };
+          } else {
+            console.log(`⚠️ [AI-AGENT] AI category ${aiParams.category} is also not leaf, keeping original`);
+          }
+        }
+      }
+
+      // 3. If confidence is low, use AI fallback
+      if (analysis.confidence < 50) {
+        console.log('⚠️ [AI-AGENT] Low confidence, using AI fallback...');
+        const aiParams = await this.analyzeMessage(userMessage, language);
+
+        // Merge results - prefer leaf categories
         return this.mergeAnalysis(analysis, aiParams);
       }
 
-      // 3. Build search parameters
+      // 4. Build search parameters
       const searchParams = searchParamsBuilder.build(analysis);
 
-      console.log('✅ [AI-AGENT] Dynamic analysis complete');
+      console.log('✅ [AI-AGENT] Dynamic analysis complete:', {
+        categorySlug: searchParams.categorySlug,
+        isLeaf: analysis.category?.isLeaf,
+        confidence: analysis.confidence
+      });
+
       return searchParams;
 
     } catch (error) {
@@ -289,41 +326,49 @@ class AIAgent {
       }
 
       let categoryList = promptContext || '\n\nCommon categories: vehicles, real-estate, electronics, furniture, fashion, services';
-      
+
       const systemPrompt = `You are an AI assistant helping users search for items on kasioon.com marketplace in Syria.${categoryList}
 
 IMPORTANT: The user's message is in ${detectedLanguage === 'ar' ? 'Arabic' : 'English'}. Extract search parameters from the user's message and return them in JSON format.
 
+⚠️ CRITICAL RULE - ALWAYS USE THE MOST SPECIFIC (LEAF) CATEGORY:
+- NEVER use generic/root categories like "real-estate" or "vehicles"
+- ALWAYS use the most specific subcategory that matches the user's request
+- Examples of CORRECT specific categories:
+  ✅ "houses" (not "real-estate") for بيت/منزل/دار
+  ✅ "apartments" (not "real-estate") for شقة/شقق
+  ✅ "lands" (not "real-estate") for أرض/أراضي
+  ✅ "cars" (not "vehicles") for سيارة/سيارات
+  ✅ "motorcycles" (not "vehicles") for دراجة نارية
+  ✅ "villas" (not "real-estate") for فيلا/فيلات
+
 Extract the following parameters if mentioned:
 - city: The city where they want to search (e.g., Aleppo, Damascus, Homs, Latakia)
-- category: Main category slug (MUST match one of the available category slugs exactly, or null if no match)
+- category: SPECIFIC category slug - use the MOST SPECIFIC subcategory available
 - keywords: General search keywords (extract from user message)
 - minPrice: Minimum price
 - maxPrice: Maximum price
 - condition: Item condition (new, used)
 
-IMPORTANT CATEGORIZATION RULES:
+SPECIFIC CATEGORIZATION RULES (USE LEAF CATEGORIES):
 
-1. SERVICES - Programming, development, business services:
-- Programming companies (شركة برمجة) → category: "services"
-- Development services (تطوير/برمجة/مواقع/تطبيقات) → category: "services"
-- Web development (تطوير مواقع) → category: "services"
-- Any business service (خدمة/خدمات) → category: "services"
+1. REAL ESTATE SUBCATEGORIES (use specific, not "real-estate"):
+- بيت / منزل / دار → category: "houses"
+- شقة / شقق → category: "apartments"
+- فيلا / فيلات → category: "villas"
+- أرض / أراضي زراعية → category: "lands" or "agricultural-lands"
+- أرض تجارية → category: "commercial-lands"
+- مكتب → category: "offices"
+- محل / دكان → category: "shops"
+- مستودع → category: "warehouses"
 
-2. REAL ESTATE:
-- ANY type of land (أرض) MUST be categorized as "real-estate", including:
-  * Agricultural land (أرض زراعية)
-  * Commercial land (أرض تجارية)
-  * Residential land (أرض سكنية)
-  * Empty land (أرض فضاء)
-- ALL property and housing MUST be categorized as "real-estate":
-  * Apartments (شقة/شقق)
-  * Houses (منزل/بيت/دار)
-  * Villas (فيلا)
-  * Offices (مكتب)
-  * Shops (محل/دكان)
-  * Buildings (عمارة/بناء)
-  * Warehouses (مستودع)
+2. VEHICLES SUBCATEGORIES (use specific, not "vehicles"):
+- سيارة / سيارات → category: "cars"
+- دراجة نارية / موتور → category: "motorcycles"
+- شاحنة / تريلا → category: "trucks"
+- باص / حافلة → category: "buses"
+
+3. SERVICES → category: "services"
 
 For vehicles specifically, also extract:
 - carBrand: Car brand/make (e.g., Toyota, BMW, Mercedes)
@@ -333,32 +378,33 @@ For vehicles specifically, also extract:
 - fuelType: Fuel type (petrol, diesel, electric, hybrid)
 - transmission: Transmission type (manual, automatic)
 
-Return ONLY a valid JSON object with the extracted parameters. If a parameter is not mentioned, omit it. The category field MUST be one of the available category slugs or null.
+Return ONLY a valid JSON object with the extracted parameters. If a parameter is not mentioned, omit it.
 
-Examples:
+⚠️ CRITICAL EXAMPLES (notice the SPECIFIC categories used):
+
 User: "أريد سيارة تويوتا في حلب"
-Response: {"city": "Aleppo", "category": "vehicles", "carBrand": "Toyota", "keywords": "سيارة تويوتا"}
+Response: {"city": "Aleppo", "category": "cars", "carBrand": "Toyota", "keywords": "سيارة تويوتا"}
+
+User: "بيت للبيع في حلب"
+Response: {"city": "Aleppo", "category": "houses", "keywords": "بيت للبيع"}
+
+User: "شقة للبيع في دمشق"
+Response: {"city": "Damascus", "category": "apartments", "keywords": "شقة للبيع"}
+
+User: "أرض زراعية في إدلب"
+Response: {"city": "Idlib", "category": "lands", "keywords": "أرض زراعية"}
+
+User: "فيلا في اللاذقية"
+Response: {"city": "Latakia", "category": "villas", "keywords": "فيلا"}
 
 User: "بدي شركة برمجة في دمشق"
 Response: {"city": "Damascus", "category": "services", "keywords": "شركة برمجة"}
 
-User: "شقة للبيع في دمشق"
-Response: {"city": "Damascus", "category": "real-estate", "keywords": "شقة للبيع"}
-
-User: "بدي ارض زراعية في إدلب"
-Response: {"city": "Idlib", "category": "real-estate", "keywords": "أرض زراعية"}
-
-User: "تطوير مواقع ويب"
-Response: {"category": "services", "keywords": "تطوير مواقع ويب"}
-
-User: "أرض تجارية للبيع في حلب"
-Response: {"city": "Aleppo", "category": "real-estate", "keywords": "أرض تجارية للبيع"}
-
-User: "منزل في اللاذقية"
-Response: {"city": "Latakia", "category": "real-estate", "keywords": "منزل"}
-
 User: "لابتوب مستعمل"
-Response: {"category": "electronics", "keywords": "لابتوب", "condition": "used"}`;
+Response: {"category": "electronics", "keywords": "لابتوب", "condition": "used"}
+
+User: "دراجة نارية في حمص"
+Response: {"city": "Homs", "category": "motorcycles", "keywords": "دراجة نارية"}`;
 
       let extractedParams;
 
@@ -1111,6 +1157,7 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
 
   /**
    * Search marketplace with smart fallback strategies and filter enrichment
+   * IMPROVED: Handles fallback messages and never uses parent categories
    * @param {Object} params - Search parameters
    * @param {string} userMessage - Original user message
    * @param {string} language - Language code
@@ -1126,10 +1173,14 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
       console.log('📋 [AGENT] Enriched params:', JSON.stringify(enrichedParams, null, 2));
 
       // Step 2: Use smart search instead of direct search
-      const { results, usedStrategy, totalStrategiesTried } = await marketplaceSearch.smartSearch(enrichedParams);
+      const { results, usedStrategy, totalStrategiesTried, fallbackMessage } = await marketplaceSearch.smartSearch(enrichedParams);
 
       console.log(`📊 [AGENT] Smart search complete: ${results.length} results using "${usedStrategy}" (tried ${totalStrategiesTried} strategies)`);
-      
+
+      if (fallbackMessage) {
+        console.log(`💬 [AGENT] Fallback message: ${fallbackMessage[language] || fallbackMessage.ar || fallbackMessage}`);
+      }
+
       // DEBUG: Log raw results from API before filtering
       console.log('\n🔍 [DEBUG-AGENT] ========== RAW API RESULTS (BEFORE FILTERING) ==========');
       console.log('📦 [DEBUG-AGENT] Results count:', results.length);
@@ -1155,7 +1206,8 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
           usedStrategy,
           totalStrategiesTried,
           filterDescription: enrichedParams.filterDescription || null,
-          matchedFilters: enrichedParams.matchedFilters || null
+          matchedFilters: enrichedParams.matchedFilters || null,
+          fallbackMessage: fallbackMessage ? (fallbackMessage[language] || fallbackMessage.ar || fallbackMessage) : null
         };
       }
 
@@ -1164,7 +1216,8 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
         usedStrategy,
         totalStrategiesTried,
         filterDescription: null,
-        matchedFilters: null
+        matchedFilters: null,
+        fallbackMessage: fallbackMessage ? (fallbackMessage[language] || fallbackMessage.ar || fallbackMessage) : null
       };
     } catch (error) {
       console.error('❌ [AGENT] Search error:', error.message);

@@ -8,6 +8,47 @@ const logger = require('../../utils/logger');
  */
 class MessageAnalyzer {
   constructor() {
+    // ============================================================================
+    // LEAF CATEGORY KEYWORDS
+    // Maps Arabic/English keywords to SPECIFIC leaf category slugs
+    // These help identify specific categories even when API data is incomplete
+    // ============================================================================
+    this.leafCategoryKeywords = {
+      // Real Estate - LEAF categories (not "real-estate")
+      'houses': ['بيت', 'بيوت', 'منزل', 'منازل', 'دار', 'house', 'houses', 'home', 'homes'],
+      'apartments': ['شقة', 'شقق', 'apartment', 'apartments', 'flat', 'flats'],
+      'villas': ['فيلا', 'فيلات', 'villa', 'villas'],
+      'lands': ['أرض', 'ارض', 'أراضي', 'اراضي', 'land', 'lands', 'plot'],
+      'agricultural-lands': ['أرض زراعية', 'ارض زراعية', 'زراعي', 'زراعية', 'agricultural'],
+      'commercial-lands': ['أرض تجارية', 'ارض تجارية', 'تجاري', 'تجارية'],
+      'offices': ['مكتب', 'مكاتب', 'office', 'offices'],
+      'shops': ['محل', 'محلات', 'دكان', 'دكاكين', 'shop', 'shops', 'store', 'stores'],
+      'warehouses': ['مستودع', 'مستودعات', 'مخزن', 'مخازن', 'warehouse', 'warehouses'],
+
+      // Vehicles - LEAF categories (not "vehicles")
+      'cars': ['سيارة', 'سيارات', 'car', 'cars', 'automobile'],
+      'motorcycles': ['دراجة نارية', 'دراجات نارية', 'موتور', 'موتوسيكل', 'motorcycle', 'motorcycles', 'motorbike'],
+      'trucks': ['شاحنة', 'شاحنات', 'تريلا', 'truck', 'trucks', 'lorry'],
+      'buses': ['باص', 'باصات', 'حافلة', 'حافلات', 'bus', 'buses'],
+
+      // Electronics
+      'mobiles': ['موبايل', 'موبايلات', 'جوال', 'هاتف', 'mobile', 'phone', 'smartphone'],
+      'laptops': ['لابتوب', 'لابتوبات', 'حاسوب محمول', 'laptop', 'laptops', 'notebook'],
+      'tablets': ['تابلت', 'آيباد', 'tablet', 'ipad'],
+      'computers': ['كمبيوتر', 'حاسوب', 'computer', 'desktop', 'pc'],
+
+      // Furniture
+      'furniture': ['أثاث', 'اثاث', 'موبيليا', 'furniture']
+    };
+
+    // Build reverse lookup: keyword -> category
+    this.keywordToCategory = {};
+    for (const [category, keywords] of Object.entries(this.leafCategoryKeywords)) {
+      for (const keyword of keywords) {
+        this.keywordToCategory[keyword.toLowerCase()] = category;
+      }
+    }
+
     // Number patterns (these are regex patterns, not static data)
     this.numberPatterns = {
       // Price with unit
@@ -115,56 +156,251 @@ class MessageAnalyzer {
   }
 
   /**
+   * Find all categories matching the search term
+   * Instead of stopping at first match, collect ALL matches for ranking
+   * @param {string} searchTerm - Term to search for
+   * @returns {Array} Array of matching categories with match type
+   */
+  findAllCategoryMatches(searchTerm) {
+    const results = [];
+    const lowerSearch = searchTerm.toLowerCase().trim();
+
+    // 1. FIRST: Check our keyword mappings for LEAF categories
+    // This ensures we always prefer specific categories like "houses" over "real-estate"
+    if (this.keywordToCategory[lowerSearch]) {
+      const leafCategorySlug = this.keywordToCategory[lowerSearch];
+      console.log(`🎯 [ANALYZER] Keyword "${lowerSearch}" maps to LEAF category: ${leafCategorySlug}`);
+
+      results.push({
+        slug: leafCategorySlug,
+        names: [lowerSearch],
+        name: lowerSearch,
+        level: 2, // Assume leaf categories are at level 2
+        hasChildren: false, // This is a LEAF category
+        matchType: 'keyword_mapping',
+        matchScore: 25 // High priority for keyword mappings
+      });
+    }
+
+    if (!dynamicDataManager.searchIndex?.categories) {
+      console.log('⚠️ [ANALYZER] No search index available');
+      return results;
+    }
+
+    // Search in indexed categories
+    for (const cat of dynamicDataManager.searchIndex.categories) {
+      let matchType = null;
+      let matchScore = 0;
+
+      // Exact match on names (highest priority)
+      if (cat.names.includes(lowerSearch)) {
+        matchType = 'exact_name';
+        matchScore = 20;
+      }
+      // Exact match on slug
+      else if (cat.slug === lowerSearch) {
+        matchType = 'exact_slug';
+        matchScore = 18;
+      }
+      // Partial match - name contains search term
+      else if (cat.names.some(name => name.includes(lowerSearch))) {
+        matchType = 'partial_name';
+        matchScore = 12;
+      }
+      // Partial match - search term contains name
+      else if (cat.names.some(name => lowerSearch.includes(name) && name.length > 2)) {
+        matchType = 'reverse_partial';
+        matchScore = 10;
+      }
+      // Slug contains search term
+      else if (cat.slug.includes(lowerSearch)) {
+        matchType = 'partial_slug';
+        matchScore = 8;
+      }
+
+      if (matchType) {
+        // Get full category data from categoryMaps
+        const fullCat = dynamicDataManager.categoryMaps?.bySlug.get(cat.slug);
+
+        // Determine if leaf category (no children)
+        const hasChildren = fullCat?.children?.length > 0 || false;
+
+        results.push({
+          slug: cat.slug,
+          names: cat.names,
+          name: cat.names[0],
+          name_ar: fullCat?.name_ar,
+          name_en: fullCat?.name_en,
+          level: cat.level || 0,
+          parent: cat.parent ? { slug: cat.parent } : fullCat?.parent,
+          hasChildren: hasChildren,
+          listingCount: fullCat?.listingCount || 0,
+          matchType: matchType,
+          matchScore: matchScore
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Rank categories by relevance and specificity
+   * Prioritizes LEAF categories (most specific) over root/parent categories
+   * @param {Array} categories - Categories to rank
+   * @returns {Array} Sorted categories with confidence scores
+   */
+  rankCategories(categories) {
+    if (!categories || categories.length === 0) return [];
+
+    // Remove duplicates (same slug)
+    const uniqueCategories = categories.filter((cat, index, self) =>
+      index === self.findIndex(c => c.slug === cat.slug)
+    );
+
+    console.log(`📊 [RANK] Ranking ${uniqueCategories.length} unique categories...`);
+
+    // Calculate confidence for each category
+    const ranked = uniqueCategories.map(cat => {
+      let confidence = 40; // Base confidence
+
+      // 1. CRITICAL: Leaf categories get HIGHEST priority (NO children = most specific)
+      if (!cat.hasChildren) {
+        confidence += 35; // Big bonus for leaf categories
+        console.log(`  ✅ [RANK] ${cat.slug} is LEAF category +35`);
+      } else {
+        console.log(`  ⚠️ [RANK] ${cat.slug} has children (NOT leaf)`);
+      }
+
+      // 2. Level bonus (deeper = more specific)
+      const levelBonus = (cat.level || 0) * 10;
+      confidence += levelBonus;
+
+      // 3. Match type bonus
+      if (cat.matchScore) {
+        confidence += cat.matchScore;
+      }
+
+      // 4. Listing count bonus (active categories)
+      if (cat.listingCount && cat.listingCount > 0) {
+        const listingBonus = Math.min(cat.listingCount / 100, 10);
+        confidence += listingBonus;
+      }
+
+      return { ...cat, confidence: Math.round(confidence) };
+    });
+
+    // Sort by confidence (highest first)
+    const sorted = ranked.sort((a, b) => b.confidence - a.confidence);
+
+    // Log top 5 for debugging
+    console.log('🏆 [RANK] Top ranked categories:');
+    sorted.slice(0, 5).forEach((cat, i) => {
+      console.log(`  ${i + 1}. ${cat.slug} (${cat.confidence}% conf, level: ${cat.level}, leaf: ${!cat.hasChildren})`);
+    });
+
+    return sorted;
+  }
+
+  /**
    * Extract category from message
+   * NEW: Collects ALL matches and ranks them, preferring LEAF categories
    */
   async extractCategory(message, language) {
     const words = message.toLowerCase().split(/\s+/);
+    const matches = [];
 
-    // 1. Local search first (fast)
+    console.log('🔍 [EXTRACT-CAT] Analyzing message for categories...');
+
+    // 1. Local search - collect ALL matches from single words
     for (const word of words) {
       if (word.length < 2) continue;
 
-      const found = dynamicDataManager.findCategoryLocally(word);
-      if (found) {
-        return {
-          slug: found.slug,
-          name: found.name || found.name_ar || found.name_en,
-          level: found.level,
-          parent: found.parent?.slug
-        };
+      const found = this.findAllCategoryMatches(word);
+      if (found.length > 0) {
+        console.log(`  📝 Found ${found.length} matches for "${word}"`);
+        matches.push(...found);
       }
     }
 
-    // 2. Compound search (two words together)
+    // 2. Compound search (two words together) - often more specific
     for (let i = 0; i < words.length - 1; i++) {
       const compound = `${words[i]} ${words[i + 1]}`;
-      const found = dynamicDataManager.findCategoryLocally(compound);
-      if (found) {
+      const found = this.findAllCategoryMatches(compound);
+      if (found.length > 0) {
+        console.log(`  📝 Found ${found.length} matches for compound "${compound}"`);
+        // Compound matches get extra score
+        found.forEach(f => { f.matchScore += 5; });
+        matches.push(...found);
+      }
+    }
+
+    // 3. Rank all collected matches
+    if (matches.length > 0) {
+      console.log(`📊 [EXTRACT-CAT] Ranking ${matches.length} total matches...`);
+      const ranked = this.rankCategories(matches);
+
+      if (ranked.length > 0) {
+        const best = ranked[0];
+
+        console.log(`✅ [EXTRACT-CAT] Selected: ${best.slug} (${best.confidence}% confidence)`);
+        console.log(`   └─ isLeaf: ${!best.hasChildren}, level: ${best.level}`);
+
         return {
-          slug: found.slug,
-          name: found.name || found.name_ar || found.name_en,
-          level: found.level,
-          parent: found.parent?.slug
+          slug: best.slug,
+          name: best.name || best.name_ar || best.name_en,
+          level: best.level || 0,
+          parent: best.parent?.slug || null,
+          isLeaf: !best.hasChildren,
+          hasChildren: best.hasChildren,
+          confidence: best.confidence,
+          allMatches: ranked.slice(0, 5) // Keep top 5 alternatives
         };
       }
     }
 
-    // 3. API search (if not found locally)
+    // 4. API search as fallback (if not found locally)
+    console.log('🌐 [EXTRACT-CAT] No local matches, trying API search...');
     for (const word of words) {
       if (word.length < 3) continue;
 
-      const apiResults = await dynamicDataManager.searchCategories(word, language);
-      if (apiResults.length > 0) {
-        const best = apiResults[0];
-        return {
-          slug: best.slug,
-          name: best.name,
-          level: best.level,
-          parent: best.parent?.slug
-        };
+      try {
+        const apiResults = await dynamicDataManager.searchCategories(word, language);
+        if (apiResults && apiResults.length > 0) {
+          console.log(`  ✅ API returned ${apiResults.length} results for "${word}"`);
+
+          // Enhance API results with hasChildren info and rank them
+          const enhancedResults = apiResults.map(cat => ({
+            ...cat,
+            hasChildren: cat.children?.length > 0 || cat.hasChildren || false,
+            matchType: 'api_search',
+            matchScore: 10
+          }));
+
+          const ranked = this.rankCategories(enhancedResults);
+
+          if (ranked.length > 0) {
+            const best = ranked[0];
+            console.log(`✅ [EXTRACT-CAT] Selected from API: ${best.slug} (${best.confidence}% confidence)`);
+
+            return {
+              slug: best.slug,
+              name: best.name,
+              level: best.level || 0,
+              parent: best.parent?.slug || null,
+              isLeaf: !best.hasChildren,
+              hasChildren: best.hasChildren,
+              confidence: best.confidence,
+              allMatches: ranked.slice(0, 5)
+            };
+          }
+        }
+      } catch (error) {
+        console.error(`❌ [EXTRACT-CAT] API search error for "${word}":`, error.message);
       }
     }
 
+    console.log('❌ [EXTRACT-CAT] No category found');
     return null;
   }
 

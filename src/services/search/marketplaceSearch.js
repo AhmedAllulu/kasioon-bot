@@ -847,6 +847,7 @@ class MarketplaceSearchService {
 
   /**
    * Get search suggestions when exact match not found
+   * IMPROVED: Uses sibling categories instead of parent categories
    * @param {Object} originalParams - Original search parameters
    * @returns {Promise<Array>} Array of suggestions
    */
@@ -854,58 +855,120 @@ class MarketplaceSearchService {
     const suggestions = [];
 
     try {
-      // Suggestion 1: Try removing price constraints
-      if (originalParams.minPrice || originalParams.maxPrice) {
-        const withoutPrice = { ...originalParams };
-        delete withoutPrice.minPrice;
-        delete withoutPrice.maxPrice;
-        const results = await this.search(withoutPrice);
+      console.log('💡 [SUGGESTIONS] Building suggestions for:', originalParams.category);
+
+      // Suggestion 1: Same category, remove location filter (expand to other provinces)
+      if (originalParams.province || originalParams.city) {
+        const withoutLocation = { ...originalParams };
+        delete withoutLocation.province;
+        delete withoutLocation.city;
+        delete withoutLocation.cityName;
+        const results = await this.search(withoutLocation);
         if (results.length > 0) {
           suggestions.push({
-            type: 'without_price_filter',
+            type: 'same_category_all_locations',
+            message_ar: `لم نجد نتائج في "${originalParams.province || originalParams.city}"، عرضنا نتائج من محافظات أخرى`,
+            message_en: `No results in "${originalParams.province || originalParams.city}", showing results from other provinces`,
             count: results.length,
-            listings: results.slice(0, 3)
+            listings: results.slice(0, 5)
           });
+          console.log(`✅ [SUGGESTIONS] Found ${results.length} results without location filter`);
         }
       }
 
-      // Suggestion 2: Try parent category
+      // Suggestion 2: Try SIBLING categories (NOT parent) + same location
+      // ⚠️ REMOVED: parent category fallback - this was causing the problem!
       if (originalParams.category) {
-        const structure = await this.loadSearchStructure();
-        if (structure?.categories) {
-          const parentCategory = this.findParentCategory(originalParams.category, structure.categories);
-          if (parentCategory) {
-            const withParent = { ...originalParams, category: parentCategory.slug };
-            const results = await this.search(withParent);
+        // Import dynamicDataManager for sibling lookup
+        const dynamicDataManager = require('../data/dynamicDataManager');
+        const siblings = dynamicDataManager.getSiblingCategories(originalParams.category);
+
+        if (siblings.length > 0) {
+          console.log(`🔍 [SUGGESTIONS] Trying ${siblings.length} sibling categories...`);
+
+          for (const sibling of siblings.slice(0, 3)) { // Try top 3 siblings
+            const withSibling = { ...originalParams, category: sibling.slug };
+            // Normalize the category parameter
+            if (withSibling.categorySlug) {
+              withSibling.categorySlug = sibling.slug;
+            }
+            const results = await this.search(withSibling);
+
             if (results.length > 0) {
               suggestions.push({
-                type: 'parent_category',
-                category: parentCategory,
+                type: 'sibling_category',
+                originalCategory: originalParams.category,
+                siblingCategory: sibling.slug,
+                siblingName: sibling.name || sibling.name_ar || sibling.name_en,
+                message_ar: `لم نجد نتائج في "${originalParams.category}"، عرضنا نتائج من فئة مشابهة: "${sibling.name_ar || sibling.name}"`,
+                message_en: `No results in "${originalParams.category}", showing results from similar category: "${sibling.name_en || sibling.name}"`,
                 count: results.length,
-                listings: results.slice(0, 3)
+                listings: results.slice(0, 5)
               });
+              console.log(`✅ [SUGGESTIONS] Found ${results.length} results in sibling category: ${sibling.slug}`);
+              break; // Found results, stop trying siblings
             }
           }
         }
       }
 
-      // Suggestion 3: Try nearby cities (expand to whole province or all cities)
-      if (originalParams.city) {
-        const withoutCity = { ...originalParams };
-        delete withoutCity.city;
-        const results = await this.search(withoutCity);
+      // Suggestion 3: Try removing price constraints
+      if (originalParams.minPrice || originalParams.maxPrice) {
+        const withoutPrice = { ...originalParams };
+        delete withoutPrice.minPrice;
+        delete withoutPrice.maxPrice;
+        delete withoutPrice['price.min'];
+        delete withoutPrice['price.max'];
+        const results = await this.search(withoutPrice);
         if (results.length > 0) {
           suggestions.push({
-            type: 'all_cities',
+            type: 'without_price_filter',
+            message_ar: 'لم نجد نتائج ضمن نطاق السعر المحدد، عرضنا نتائج بدون تصفية السعر',
+            message_en: 'No results in specified price range, showing results without price filter',
             count: results.length,
             listings: results.slice(0, 3)
           });
         }
       }
+
+      // Suggestion 4: Sibling categories + no location (last resort, but NOT parent category)
+      if (suggestions.length === 0 && originalParams.category) {
+        const dynamicDataManager = require('../data/dynamicDataManager');
+        const siblings = dynamicDataManager.getSiblingCategories(originalParams.category);
+
+        if (siblings.length > 0) {
+          for (const sibling of siblings.slice(0, 3)) {
+            const withSiblingNoLocation = {
+              category: sibling.slug,
+              categorySlug: sibling.slug
+            };
+
+            const results = await this.search(withSiblingNoLocation);
+
+            if (results.length > 0) {
+              suggestions.push({
+                type: 'sibling_category_all_locations',
+                originalCategory: originalParams.category,
+                siblingCategory: sibling.slug,
+                siblingName: sibling.name || sibling.name_ar || sibling.name_en,
+                message_ar: `لم نجد نتائج، عرضنا لك إعلانات من فئة "${sibling.name_ar || sibling.name}" من كل المحافظات`,
+                message_en: `No results found, showing listings from "${sibling.name_en || sibling.name}" category from all provinces`,
+                count: results.length,
+                listings: results.slice(0, 5)
+              });
+              console.log(`✅ [SUGGESTIONS] Found ${results.length} results in sibling + all locations`);
+              break;
+            }
+          }
+        }
+      }
+
     } catch (error) {
+      console.error('❌ [SUGGESTIONS] Error getting suggestions:', error.message);
       logger.error('Error getting suggestions:', error);
     }
 
+    console.log(`💡 [SUGGESTIONS] Generated ${suggestions.length} suggestions`);
     return suggestions;
   }
 
@@ -931,91 +994,151 @@ class MarketplaceSearchService {
 
   /**
    * Smart search with fallback strategies
-   * Tries multiple keyword combinations for better results
+   * IMPROVED: Never falls back to parent category, uses sibling categories instead
    * @param {Object} params - Search parameters
    * @returns {Promise<Object>} Search results with metadata
    */
   async smartSearch(params) {
     console.log('🧠 [SMART-SEARCH] Starting intelligent search...');
-    
+    console.log('📋 [SMART-SEARCH] Original params:', JSON.stringify(params, null, 2));
+
     const strategies = this.buildSearchStrategies(params);
     let allResults = [];
     let usedStrategy = null;
-    
+    let fallbackMessage = null;
+
     for (const strategy of strategies) {
       console.log(`🔍 [SMART-SEARCH] Trying strategy: ${strategy.name}`);
-      console.log(`📋 [SMART-SEARCH] Params:`, JSON.stringify(strategy.params, null, 2));
-      
+      console.log(`📋 [SMART-SEARCH] Strategy params:`, JSON.stringify(strategy.params, null, 2));
+
       try {
         const results = await this.search(strategy.params);
-        
+
         if (results && results.length > 0) {
           console.log(`✅ [SMART-SEARCH] Strategy "${strategy.name}" returned ${results.length} results`);
           allResults = results;
           usedStrategy = strategy.name;
+          fallbackMessage = strategy.fallbackMessage || null;
           break; // Found results, stop trying
         }
-        
+
         console.log(`⚠️ [SMART-SEARCH] Strategy "${strategy.name}" returned 0 results`);
       } catch (error) {
         console.error(`❌ [SMART-SEARCH] Strategy "${strategy.name}" failed:`, error.message);
       }
     }
-    
+
     // If all strategies failed, return empty with metadata
     return {
       results: allResults,
       usedStrategy: usedStrategy || 'none',
-      totalStrategiesTried: strategies.length
+      totalStrategiesTried: strategies.length,
+      fallbackMessage: fallbackMessage
     };
   }
 
   /**
    * Build search strategies from most specific to broadest
+   * IMPROVED: Respects category hierarchy - NEVER uses parent category
+   * Order:
+   * 1. Exact match (same category + same location)
+   * 2. Same category + other locations
+   * 3. Sibling categories + same location
+   * 4. Sibling categories + other locations
+   *
    * @param {Object} params - Original search parameters
    * @returns {Array} Array of search strategies
    */
   buildSearchStrategies(params) {
     const strategies = [];
-    const keywords = params.keywords || '';
-    const words = keywords.split(/\s+/).filter(w => w.length > 1);
+    const categorySlug = params.category || params.categorySlug;
+    const hasLocation = params.province || params.city || params.cityName;
 
-    // Strategy 1: Full phrase with all params (most specific)
-    if (keywords) {
-      strategies.push({
-        name: 'full_phrase',
-        params: { ...params }
-      });
-    }
+    console.log('🔨 [STRATEGIES] Building search strategies...');
+    console.log(`   Category: ${categorySlug}, Has Location: ${!!hasLocation}`);
 
-    // Strategy 2: Try each word individually (for Arabic word variations)
-    if (words.length > 1) {
-      words.forEach((word, index) => {
-        strategies.push({
-          name: `single_word_${index + 1}`,
-          params: { ...params, keywords: word }
-        });
-      });
-    }
+    // Strategy 1: EXACT match - category + location + all filters (most specific)
+    strategies.push({
+      name: 'exact_match',
+      params: { ...params },
+      fallbackMessage: null
+    });
 
-    // Strategy 3: Category + Location only (no keywords)
-    if (params.category || params.city) {
-      const broadParams = { ...params };
-      delete broadParams.keywords;
+    // Strategy 2: Same category, remove keywords (might be too specific)
+    if (params.keywords) {
+      const withoutKeywords = { ...params };
+      delete withoutKeywords.keywords;
       strategies.push({
         name: 'category_location_only',
-        params: broadParams
+        params: withoutKeywords,
+        fallbackMessage: null
       });
     }
 
-    // Strategy 4: Category only (broadest)
-    if (params.category) {
+    // Strategy 3: Same category, ALL locations (expand location)
+    if (hasLocation) {
+      const sameCategory = { ...params };
+      delete sameCategory.province;
+      delete sameCategory.city;
+      delete sameCategory.cityName;
       strategies.push({
-        name: 'category_only',
-        params: { category: params.category }
+        name: 'same_category_all_locations',
+        params: sameCategory,
+        fallbackMessage: {
+          ar: `⚠️ لم نجد نتائج في "${params.province || params.city}"، عرضنا نتائج من محافظات أخرى`,
+          en: `⚠️ No results in "${params.province || params.city}", showing results from other provinces`
+        }
       });
     }
 
+    // Strategy 4-6: SIBLING categories (NOT parent!) + same location
+    // ⚠️ CRITICAL: We NEVER fall back to parent category (real-estate, vehicles, etc.)
+    if (categorySlug) {
+      const dynamicDataManager = require('../data/dynamicDataManager');
+      const siblings = dynamicDataManager.getSiblingCategories(categorySlug);
+
+      if (siblings.length > 0) {
+        console.log(`   Found ${siblings.length} sibling categories to try`);
+
+        // Try each sibling with original location
+        siblings.slice(0, 3).forEach((sibling, index) => {
+          const siblingParams = { ...params };
+          siblingParams.category = sibling.slug;
+          siblingParams.categorySlug = sibling.slug;
+
+          strategies.push({
+            name: `sibling_${sibling.slug}_with_location`,
+            params: siblingParams,
+            fallbackMessage: {
+              ar: `⚠️ لم نجد "${categorySlug}"، عرضنا لك نتائج من فئة "${sibling.name_ar || sibling.name}"`,
+              en: `⚠️ No "${categorySlug}" found, showing results from "${sibling.name_en || sibling.name}" category`
+            }
+          });
+
+          // Also try sibling without location constraint
+          if (hasLocation) {
+            const siblingNoLocation = { ...siblingParams };
+            delete siblingNoLocation.province;
+            delete siblingNoLocation.city;
+            delete siblingNoLocation.cityName;
+
+            strategies.push({
+              name: `sibling_${sibling.slug}_all_locations`,
+              params: siblingNoLocation,
+              fallbackMessage: {
+                ar: `⚠️ لم نجد نتائج، عرضنا "${sibling.name_ar || sibling.name}" من كل المحافظات`,
+                en: `⚠️ No results found, showing "${sibling.name_en || sibling.name}" from all provinces`
+              }
+            });
+          }
+        });
+      }
+    }
+
+    // ❌ REMOVED: Parent category fallback - this was causing the main problem!
+    // We should NEVER search in "real-estate" when user asked for "houses"
+
+    console.log(`🔨 [STRATEGIES] Built ${strategies.length} strategies`);
     return strategies;
   }
 

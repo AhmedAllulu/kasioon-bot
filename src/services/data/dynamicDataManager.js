@@ -384,6 +384,225 @@ class DynamicDataManager {
       lastUpdates: this.cache.lastUpdate
     };
   }
+
+  // ============================================================================
+  // NEW HELPER FUNCTIONS FOR IMPROVED CATEGORY SEARCH
+  // ============================================================================
+
+  /**
+   * Get detailed category information including children status
+   * @param {string} categorySlug - Category slug
+   * @param {string} language - Language code (ar/en)
+   * @returns {Object|null} Category details with hasChildren flag
+   */
+  async getCategoryDetails(categorySlug, language = 'ar') {
+    try {
+      console.log(`🔍 [DYNAMIC] Fetching details for category: ${categorySlug}`);
+
+      // Check local cache first
+      if (this.categoryMaps?.bySlug.has(categorySlug)) {
+        const cached = this.categoryMaps.bySlug.get(categorySlug);
+        const hasChildren = cached.children?.length > 0 || false;
+        console.log(`✅ [DYNAMIC] Found in cache: ${categorySlug} (hasChildren: ${hasChildren})`);
+        return { ...cached, hasChildren };
+      }
+
+      // Fetch from API
+      const response = await axios.get(
+        `${this.apiUrl}/api/categories/${categorySlug}`,
+        {
+          params: { language },
+          headers: this.getHeaders(),
+          timeout: 5000
+        }
+      );
+
+      if (response.data?.success && response.data?.data) {
+        const category = response.data.data.category || response.data.data;
+
+        // Add hasChildren flag
+        category.hasChildren = category.children && category.children.length > 0;
+
+        console.log(`✅ [DYNAMIC] Category details fetched:`, {
+          slug: category.slug,
+          level: category.level,
+          hasChildren: category.hasChildren,
+          childrenCount: category.children?.length || 0
+        });
+
+        // Store in cache
+        if (!this.categoryMaps) {
+          this.categoryMaps = { bySlug: new Map(), byId: new Map(), byNameAr: new Map(), byNameEn: new Map(), allNames: [] };
+        }
+        this.categoryMaps.bySlug.set(categorySlug, category);
+
+        return category;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('❌ [DYNAMIC] Error fetching category details:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Get all leaf (final) categories - categories with NO children
+   * These are the most specific categories and should be preferred
+   * @returns {Array} Array of leaf categories
+   */
+  getLeafCategories() {
+    const leaves = [];
+
+    /**
+     * Recursive function to find leaf categories
+     */
+    const findLeaves = (categories, parentSlug = null) => {
+      if (!categories || !Array.isArray(categories)) return;
+
+      for (const cat of categories) {
+        // Check if leaf (no children)
+        if (!cat.children || cat.children.length === 0) {
+          leaves.push({
+            ...cat,
+            parentSlug: parentSlug,
+            isLeaf: true
+          });
+        } else {
+          // Has children, recurse into them
+          findLeaves(cat.children, cat.slug);
+        }
+      }
+    };
+
+    // Start from cached structure categories
+    const allCategories = this.cache.structure?.categories ||
+                          this.cache.categories ||
+                          [];
+
+    findLeaves(allCategories);
+
+    console.log(`🍃 [DYNAMIC] Found ${leaves.length} leaf categories`);
+    return leaves;
+  }
+
+  /**
+   * Get sibling categories (categories with same parent)
+   * Useful for fallback search in related categories
+   * @param {string} categorySlug - Category slug
+   * @returns {Array} Array of sibling categories
+   */
+  getSiblingCategories(categorySlug) {
+    console.log(`🔍 [DYNAMIC] Finding siblings for: ${categorySlug}`);
+
+    // Get the category
+    const category = this.categoryMaps?.bySlug.get(categorySlug);
+
+    if (!category) {
+      console.log(`⚠️ [DYNAMIC] Category not found in cache: ${categorySlug}`);
+
+      // Try to find in search index
+      const indexed = this.searchIndex?.categories?.find(c => c.slug === categorySlug);
+      if (indexed && indexed.parent) {
+        // Find parent and get its children
+        const parentCat = this.categoryMaps?.bySlug.get(indexed.parent);
+        if (parentCat?.children) {
+          const siblings = parentCat.children.filter(c => c.slug !== categorySlug);
+          console.log(`✅ [DYNAMIC] Found ${siblings.length} siblings via index`);
+          return siblings;
+        }
+      }
+      return [];
+    }
+
+    // Check if has parent
+    const parentSlug = category.parent?.slug || category.parentSlug;
+    if (!parentSlug) {
+      console.log(`⚠️ [DYNAMIC] Category has no parent: ${categorySlug}`);
+      return [];
+    }
+
+    // Get parent
+    const parent = this.categoryMaps?.bySlug.get(parentSlug);
+
+    if (!parent || !parent.children) {
+      console.log(`⚠️ [DYNAMIC] Parent not found or has no children: ${parentSlug}`);
+
+      // Try to find siblings from structure
+      const findSiblingsInStructure = (categories, targetSlug) => {
+        for (const cat of categories) {
+          if (cat.children?.some(c => c.slug === targetSlug)) {
+            return cat.children.filter(c => c.slug !== targetSlug);
+          }
+          if (cat.children?.length > 0) {
+            const found = findSiblingsInStructure(cat.children, targetSlug);
+            if (found.length > 0) return found;
+          }
+        }
+        return [];
+      };
+
+      const structureCategories = this.cache.structure?.categories || [];
+      const siblings = findSiblingsInStructure(structureCategories, categorySlug);
+      if (siblings.length > 0) {
+        console.log(`✅ [DYNAMIC] Found ${siblings.length} siblings via structure search`);
+        return siblings;
+      }
+
+      return [];
+    }
+
+    // Filter out the current category
+    const siblings = parent.children.filter(c => c.slug !== categorySlug);
+
+    console.log(`✅ [DYNAMIC] Found ${siblings.length} siblings for ${categorySlug}:`,
+      siblings.map(s => s.slug).join(', ')
+    );
+
+    return siblings;
+  }
+
+  /**
+   * Check if a category is a leaf (has no children)
+   * @param {string} categorySlug - Category slug
+   * @returns {boolean} True if leaf category
+   */
+  isLeafCategory(categorySlug) {
+    // Check in categoryMaps
+    const category = this.categoryMaps?.bySlug.get(categorySlug);
+    if (category) {
+      return !category.children || category.children.length === 0;
+    }
+
+    // Check in search index
+    const indexed = this.searchIndex?.categories?.find(c => c.slug === categorySlug);
+    if (indexed) {
+      // Check if any category has this as parent
+      const hasChildren = this.searchIndex.categories.some(c => c.parent === categorySlug);
+      return !hasChildren;
+    }
+
+    // Unknown - assume not leaf for safety
+    return false;
+  }
+
+  /**
+   * Get category path from root to category
+   * @param {string} categorySlug - Category slug
+   * @returns {Array} Array of category slugs from root to target
+   */
+  getCategoryPath(categorySlug) {
+    const path = [];
+    let current = this.categoryMaps?.bySlug.get(categorySlug);
+
+    while (current) {
+      path.unshift(current.slug);
+      const parentSlug = current.parent?.slug;
+      current = parentSlug ? this.categoryMaps?.bySlug.get(parentSlug) : null;
+    }
+
+    return path;
+  }
 }
 
 module.exports = new DynamicDataManager();
