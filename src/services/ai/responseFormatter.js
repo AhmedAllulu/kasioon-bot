@@ -91,11 +91,6 @@ class ResponseFormatter {
     const headerTemplate = this.getRandomVariation(this.successVariations[isArabic ? 'ar' : 'en']);
     message += headerTemplate.replace('{count}', results.length) + '\n\n';
 
-    // Add search parameters summary
-    if (searchParams) {
-      message += this.formatSearchParametersSummary(searchParams, language) + '\n';
-    }
-
     // Check for location mismatch
     if (searchParams && (searchParams.city || searchParams.province)) {
       const requestedLocation = searchParams.province || searchParams.city;
@@ -133,6 +128,140 @@ class ResponseFormatter {
     message += this.getFooterMessage(isArabic);
 
     return message;
+  }
+
+  /**
+   * Format search results as array of separate messages (one per listing)
+   * Each message contains one listing with its URL for better preview loading
+   * @param {Array} results - Search results from API
+   * @param {string} language - Language code ('ar' or 'en')
+   * @param {Object} searchParams - Original search parameters from user query
+   * @returns {Object} Object with header message and array of listing messages
+   */
+  formatSearchResultsAsSeparateMessages(results, language = 'ar', searchParams = null) {
+    if (!results || results.length === 0) {
+      return {
+        header: this.getNoResultsMessage(language, searchParams),
+        listings: [],
+        footer: null
+      };
+    }
+
+    const isArabic = language === 'ar';
+
+    // Build header message
+    let header = '';
+    const headerTemplate = this.getRandomVariation(this.successVariations[isArabic ? 'ar' : 'en']);
+    header += headerTemplate.replace('{count}', Math.min(results.length, 7));
+
+    // Check for location mismatch
+    if (searchParams && (searchParams.city || searchParams.province)) {
+      const requestedLocation = searchParams.province || searchParams.city;
+      const actualLocations = this.getUniqueResultLocations(results);
+
+      const hasMatchingLocation = actualLocations.some(loc =>
+        this.locationsMatch(requestedLocation, loc)
+      );
+
+      if (!hasMatchingLocation && actualLocations.length > 0) {
+        header += '\n\n' + this.formatLocationMismatchWarning(requestedLocation, actualLocations, language);
+      }
+    }
+
+    // Check for validation warnings
+    if (results[0]?._validation?.warnings?.length > 0) {
+      header += '\n\n' + results[0]._validation.warnings.join('\n');
+    }
+
+    // Format each listing as separate message (max 7)
+    const listings = results.slice(0, 7).map((item, index) => {
+      return this.formatSingleListingForSeparateMessage(item, index + 1, isArabic);
+    });
+
+    // Footer message
+    const footer = this.getFooterMessage(isArabic);
+
+    return { header, listings, footer };
+  }
+
+  /**
+   * Format a single listing for separate message sending
+   * Includes URL at the end for Telegram preview
+   * @param {Object} item - Listing item
+   * @param {number} number - Item number
+   * @param {boolean} isArabic - Arabic language flag
+   * @returns {string} Formatted listing message
+   */
+  formatSingleListingForSeparateMessage(item, number, isArabic) {
+    let listing = '';
+
+    // Number and title with emoji
+    const title = item.title || (isArabic ? 'بدون عنوان' : 'No title');
+    listing += `${number}️⃣ *${this.escapeMarkdown(title)}*\n\n`;
+
+    // Category with emoji
+    if (item.category) {
+      const categoryEmoji = this.getCategoryEmoji(item.category.slug);
+      const categoryName = item.category.name ||
+        (isArabic
+          ? item.category.name_ar || item.category.nameAr
+          : item.category.name_en || item.category.nameEn);
+      if (categoryName) {
+        listing += `${categoryEmoji} ${this.escapeMarkdown(categoryName)}\n`;
+      }
+    }
+
+    // Price
+    const price = item.attributes?.price || item.price;
+    if (price) {
+      const formattedPrice = this.formatPrice(price, isArabic);
+      listing += isArabic
+        ? `💰 *${formattedPrice}*\n`
+        : `💰 *${formattedPrice}*\n`;
+    }
+
+    // Location
+    let location = null;
+    if (item.location) {
+      if (typeof item.location === 'string') {
+        location = item.location;
+      } else if (item.location.city) {
+        location = typeof item.location.city === 'string'
+          ? item.location.city
+          : item.location.city.name;
+        if (item.location.province && item.location.province !== location) {
+          location = `${location}, ${item.location.province}`;
+        }
+      } else if (item.location.province) {
+        location = item.location.province;
+      }
+    } else if (item.city) {
+      location = typeof item.city === 'string' ? item.city : item.city.name;
+    }
+
+    if (location) {
+      listing += `📍 ${this.escapeMarkdown(location)}\n`;
+    }
+
+    // Key attributes
+    const attrText = this.formatKeyAttributes(item, isArabic);
+    if (attrText) {
+      listing += attrText;
+    }
+
+    // Match score if available
+    const matchData = item._attributeMatch || item.attributeMatch;
+    const matchScore = item.matchScore ?? matchData?.score;
+    if (matchScore !== undefined && matchScore >= 70) {
+      const badge = MatchScorer.getMatchBadge(matchScore, isArabic ? 'ar' : 'en');
+      listing += `\n${badge.emoji} ${badge.text}`;
+    }
+
+    // Listing URL - placed at end for Telegram to generate preview
+    const listingUrl = item.listingUrl || item.url || `${this.websiteUrl}/listing/${item.slug || item.id}`;
+    listing += `\n\n🔗 ${listingUrl}`;
+
+    return listing;
   }
 
   /**
@@ -627,11 +756,6 @@ class ResponseFormatter {
 
     let message = `${header}\n\n`;
 
-    // Show what was searched for if parameters available
-    if (searchParams) {
-      message += this.formatSearchParametersSummary(searchParams, language) + '\n';
-    }
-
     // Build parameter-specific suggestions
     const suggestions = [];
 
@@ -865,38 +989,86 @@ class ResponseFormatter {
     const isArabic = language === 'ar';
 
     if (isArabic) {
-      return `مرحباً ${this.escapeMarkdown(firstName)}! 👋
+      return `أهلاً وسهلاً ${this.escapeMarkdown(firstName)}! 👋
 
-🛒 أنا مساعد البحث في سوق *كسيون* - أكبر سوق إلكتروني في سوريا
+━━━━━━━━━━━━━━━━━━━━
 
-*كيف أساعدك:*
-📝 أرسل رسالة نصية بما تبحث عنه
-🎤 أو أرسل رسالة صوتية
+🛒 أنا مساعدك الذكي في *سوق قاسيون*
+أكبر سوق إلكتروني في سوريا
 
-*أمثلة:*
-• "أريد سيارة تويوتا في حلب"
-• "شقة للإيجار في دمشق بسعر أقل من 500 ألف"
-• "موبايل آيفون جديد"
-• "أثاث مستعمل في حمص"
+━━━━━━━━━━━━━━━━━━━━
 
-💡 كلما كنت أكثر تحديداً، كانت النتائج أفضل!`;
+✨ *كيف تبحث؟*
+
+ببساطة أرسل لي ما تبحث عنه!
+اكتب أو أرسل رسالة صوتية 🎤
+
+━━━━━━━━━━━━━━━━━━━━
+
+📝 *أمثلة للبحث:*
+
+🚗 *سيارات:*
+"سيارة تويوتا في دمشق"
+"سيارة مستعملة بسعر أقل من مليون"
+
+🏠 *عقارات:*
+"شقة للإيجار في حلب"
+"بيت 3 غرف في حمص"
+
+📱 *إلكترونيات:*
+"موبايل آيفون"
+"لابتوب مستعمل"
+
+🛋 *أثاث وأخرى:*
+"أثاث منزلي"
+"ملابس أطفال"
+
+━━━━━━━━━━━━━━━━━━━━
+
+💡 *نصيحة:* كلما حددت أكثر (المدينة، السعر، المواصفات) كانت النتائج أدق!
+
+🚀 جرب الآن... أرسل ما تبحث عنه!`;
     }
 
     return `Welcome ${this.escapeMarkdown(firstName)}! 👋
 
-🛒 I'm the *Kasioon* marketplace assistant - Syria's largest online marketplace
+━━━━━━━━━━━━━━━━━━━━
 
-*How I can help:*
-📝 Send a text message with what you're looking for
-🎤 Or send a voice message
+🛒 I'm your smart assistant at *Kasioon Market*
+Syria's largest online marketplace
 
-*Examples:*
-• "I want a Toyota car in Aleppo"
-• "Apartment for rent in Damascus under 500k"
-• "New iPhone mobile"
-• "Used furniture in Homs"
+━━━━━━━━━━━━━━━━━━━━
 
-💡 The more specific you are, the better the results!`;
+✨ *How to search?*
+
+Simply send me what you're looking for!
+Type or send a voice message 🎤
+
+━━━━━━━━━━━━━━━━━━━━
+
+📝 *Search examples:*
+
+🚗 *Vehicles:*
+"Toyota car in Damascus"
+"Used car under 1 million"
+
+🏠 *Real Estate:*
+"Apartment for rent in Aleppo"
+"3 bedroom house in Homs"
+
+📱 *Electronics:*
+"iPhone mobile"
+"Used laptop"
+
+🛋 *Furniture & More:*
+"Home furniture"
+"Kids clothing"
+
+━━━━━━━━━━━━━━━━━━━━
+
+💡 *Tip:* The more details you provide (city, price, specs), the better results you get!
+
+🚀 Try now... send what you're looking for!`;
   }
 }
 

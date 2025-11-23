@@ -367,8 +367,8 @@ Send a voice message and I'll understand
       const cachedResults = await searchHistory.getCachedResults(userMessage);
       if (cachedResults) {
         logger.info('[TELEGRAM] Using cached results');
-        const formatted = responseFormatter.formatSearchResults(cachedResults, language);
-        await this.sendFormattedMessage(ctx, formatted);
+        // Send cached results as separate messages too
+        await this.sendResultsAsSeparateMessages(ctx, cachedResults, language, null);
 
         // Still log the search
         await searchHistory.logSearch({
@@ -399,29 +399,23 @@ Send a voice message and I'll understand
       const searchResponse = await aiAgent.searchMarketplace(extractedParams, userMessage, language);
       const { results: filteredResults, filterDescription, matchedFilters } = searchResponse;
 
-      // Format response with search parameters
-      let formattedMessage;
+      // Delete "searching" message
+      await ctx.deleteMessage(searchingMsg.message_id).catch(() => {});
+
+      // Format and send response
       if (filteredResults.length > 0) {
-        // Pass extractedParams to show search parameters summary
-        formattedMessage = responseFormatter.formatSearchResults(
-          filteredResults,
-          language,
-          null, // pagination
-          extractedParams // search parameters
-        );
+        // Send each listing as a separate message for better URL preview loading
+        await this.sendResultsAsSeparateMessages(ctx, filteredResults, language, extractedParams);
 
         // Cache results if enough results
         if (filteredResults.length >= 3) {
           await searchHistory.cacheResults(userMessage, filteredResults);
         }
       } else {
-        // Pass extractedParams to show what was searched for
-        formattedMessage = responseFormatter.getNoResultsMessage(language, extractedParams);
+        // Send no results message
+        const noResultsMessage = responseFormatter.getNoResultsMessage(language, extractedParams);
+        await this.sendFormattedMessage(ctx, noResultsMessage);
       }
-
-      // Delete "searching" message and send results
-      await ctx.deleteMessage(searchingMsg.message_id).catch(() => {});
-      await this.sendFormattedMessage(ctx, formattedMessage);
 
       // Save search results to context manager
       contextManager.saveSearchResults(userId, extractedParams, filteredResults);
@@ -621,6 +615,67 @@ Send a voice message and I'll understand
       }
     } else {
       await ctx.reply(message, { parse_mode: 'Markdown', disable_web_page_preview: true });
+    }
+  }
+
+  /**
+   * Send search results as separate messages for better URL preview loading
+   * Each listing is sent in its own message so Telegram can load the preview
+   * @param {Object} ctx - Telegraf context
+   * @param {Array} results - Search results
+   * @param {string} language - Language code
+   * @param {Object} searchParams - Search parameters
+   */
+  async sendResultsAsSeparateMessages(ctx, results, language, searchParams) {
+    try {
+      // Get formatted messages (header + individual listings + footer)
+      const { header, listings, footer } = responseFormatter.formatSearchResultsAsSeparateMessages(
+        results,
+        language,
+        searchParams
+      );
+
+      // Send header first
+      if (header) {
+        await ctx.reply(header, { parse_mode: 'Markdown', disable_web_page_preview: true });
+      }
+
+      // Send each listing as a separate message with small delay
+      // This allows Telegram to load the URL preview for each listing
+      for (let i = 0; i < listings.length; i++) {
+        const listing = listings[i];
+
+        // Small delay between messages to avoid rate limiting and allow preview loading
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+
+        try {
+          // Send with web preview enabled so the listing URL shows a preview
+          await ctx.reply(listing, {
+            parse_mode: 'Markdown',
+            disable_web_page_preview: false // Enable preview for listings
+          });
+        } catch (msgError) {
+          // If markdown fails, try plain text
+          console.warn(`[TELEGRAM] Failed to send listing ${i + 1} with markdown, trying plain text`);
+          await ctx.reply(listing.replace(/[*_`]/g, ''), {
+            disable_web_page_preview: false
+          });
+        }
+      }
+
+      // Send footer
+      if (footer) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        await ctx.reply(footer, { parse_mode: 'Markdown', disable_web_page_preview: true });
+      }
+
+    } catch (error) {
+      console.error('[TELEGRAM] Error sending separate messages:', error);
+      // Fallback to single message format
+      const formattedMessage = responseFormatter.formatSearchResults(results, language, null, searchParams);
+      await this.sendFormattedMessage(ctx, formattedMessage);
     }
   }
 
