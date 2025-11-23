@@ -12,6 +12,7 @@ const rateLimiter = require('./middleware/rateLimiter');
 const telegramRoutes = require('./routes/telegram');
 const whatsappRoutes = require('./routes/whatsapp');
 const apiRoutes = require('./routes/api');
+const chatRoutes = require('./routes/chat');
 const webhookRoutes = require('./routes/webhooks');
 
 // Import services
@@ -44,6 +45,7 @@ app.get('/health', (req, res) => {
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api', apiRoutes);
+app.use('/api/chat', chatRoutes);
 app.use('/webhooks', webhookRoutes);
 
 // Error handling
