@@ -1,5 +1,6 @@
 const axios = require('axios');
 const logger = require('../../utils/logger');
+const { detectLanguage } = require('../../utils/languageDetector');
 const aiAgent = require('../ai/agent');
 const marketplaceSearch = require('../search/marketplaceSearch');
 const audioProcessor = require('../audio/processor');
@@ -70,17 +71,6 @@ class WhatsAppHandler {
       logger.info(`Processing text message: ${text}`);
 
       // Detect language from message content
-      const detectLanguage = (messageText) => {
-        if (!messageText || typeof messageText !== 'string') return 'ar';
-        const arabicPattern = /[\u0600-\u06FF]/;
-        const hasArabic = arabicPattern.test(messageText);
-        const arabicChars = (messageText.match(/[\u0600-\u06FF]/g) || []).length;
-        const englishChars = (messageText.match(/[a-zA-Z]/g) || []).length;
-        if (hasArabic && arabicChars > messageText.length * 0.1) return 'ar';
-        if (englishChars > messageText.length * 0.5) return 'en';
-        return 'ar';
-      };
-      
       const detectedLanguage = detectLanguage(text);
       console.log('🌐 [WHATSAPP] Language detected:', detectedLanguage);
 

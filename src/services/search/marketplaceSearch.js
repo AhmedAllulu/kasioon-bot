@@ -843,8 +843,7 @@ class MarketplaceSearchService {
         }
       }
 
-      // Suggestion 2: Try SIBLING categories (NOT parent) + same location
-      // ⚠️ REMOVED: parent category fallback - this was causing the problem!
+      // Suggestion 2: Try SIBLING categories + same location
       if (originalParams.category) {
         // Import dynamicDataManager for sibling lookup
         const dynamicDataManager = require('../data/dynamicDataManager');
@@ -935,26 +934,6 @@ class MarketplaceSearchService {
 
     console.log(`💡 [SUGGESTIONS] Generated ${suggestions.length} suggestions`);
     return suggestions;
-  }
-
-  /**
-   * Find parent category in category tree
-   * @param {string} categorySlug - Category slug to find parent for
-   * @param {Array} categories - Categories array
-   * @param {Object} parent - Parent category (used recursively)
-   * @returns {Object|null} Parent category or null
-   */
-  findParentCategory(categorySlug, categories, parent = null) {
-    for (const cat of categories) {
-      if (cat.slug === categorySlug) {
-        return parent;
-      }
-      if (cat.children && cat.children.length > 0) {
-        const found = this.findParentCategory(categorySlug, cat.children, cat);
-        if (found) return found;
-      }
-    }
-    return null;
   }
 
   /**
@@ -1097,9 +1076,6 @@ class MarketplaceSearchService {
       }
     }
 
-    // ❌ REMOVED: Parent category fallback - this was causing the main problem!
-    // We should NEVER search in "real-estate" when user asked for "houses"
-
     console.log(`🔨 [STRATEGIES] Built ${strategies.length} strategies`);
     return strategies;
   }
@@ -1135,39 +1111,6 @@ class MarketplaceSearchService {
     } catch (error) {
       console.error('❌ [SEARCH] Error loading lightweight structure:', error.message);
       return null;
-    }
-  }
-
-  /**
-   * Get category hierarchy
-   * Endpoint: GET /api/search/categories/hierarchy
-   */
-  async getCategoryHierarchy(options = {}) {
-    try {
-      const { includeInactive = false, transactionTypeId = null } = options;
-      const cacheKey = `hierarchy:${this.language}:${includeInactive}:${transactionTypeId}`;
-      const cached = await cache.get(cacheKey);
-      if (cached) {
-        console.log('✅ [SEARCH] Using cached category hierarchy');
-        return JSON.parse(cached);
-      }
-
-      const response = await axios.get(`${this.apiUrl}/api/search/categories/hierarchy`, {
-        params: { language: this.language, includeInactive, transactionTypeId },
-        headers: this.getHeaders(),
-        timeout: 15000
-      });
-
-      if (response.data?.success && response.data?.data?.hierarchy) {
-        const hierarchy = response.data.data.hierarchy;
-        await cache.set(cacheKey, JSON.stringify(hierarchy), 3600);
-        console.log('✅ [SEARCH] Category hierarchy loaded');
-        return hierarchy;
-      }
-      return [];
-    } catch (error) {
-      console.error('❌ [SEARCH] Error loading hierarchy:', error.message);
-      return [];
     }
   }
 

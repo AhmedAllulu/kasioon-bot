@@ -4,95 +4,46 @@ const marketplaceSearch = require('../services/search/marketplaceSearch');
 const aiAgent = require('../services/ai/agent');
 const logger = require('../utils/logger');
 
+/**
+ * Async route handler wrapper to reduce try/catch boilerplate
+ */
+const asyncHandler = (fn, context) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(error => {
+    logger.error(`Error in ${context}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  });
+};
+
 // Search marketplace listings
-router.post('/search', async (req, res) => {
-  try {
-    const params = req.body;
-    logger.info('API search request:', params);
-
-    const results = await marketplaceSearch.search(params);
-
-    res.json({
-      success: true,
-      count: results.length,
-      results
-    });
-
-  } catch (error) {
-    logger.error('Error in API search:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
+router.post('/search', asyncHandler(async (req, res) => {
+  const params = req.body;
+  logger.info('API search request:', params);
+  const results = await marketplaceSearch.search(params);
+  res.json({ success: true, count: results.length, results });
+}, 'API search'));
 
 // Analyze message
-router.post('/analyze', async (req, res) => {
-  try {
-    const { message, language } = req.body;
-
-    if (!message) {
-      return res.status(400).json({
-        success: false,
-        error: 'Message is required'
-      });
-    }
-
-    const params = await aiAgent.analyzeMessage(message, language || 'ar');
-
-    res.json({
-      success: true,
-      params
-    });
-
-  } catch (error) {
-    logger.error('Error analyzing message:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+router.post('/analyze', asyncHandler(async (req, res) => {
+  const { message, language } = req.body;
+  if (!message) {
+    return res.status(400).json({ success: false, error: 'Message is required' });
   }
-});
+  const params = await aiAgent.analyzeMessage(message, language || 'ar');
+  res.json({ success: true, params });
+}, 'analyze message'));
 
 // Get listing details
-router.get('/listings/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const listing = await marketplaceSearch.getListingDetails(id);
-
-    res.json({
-      success: true,
-      listing
-    });
-
-  } catch (error) {
-    logger.error('Error fetching listing details:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
+router.get('/listings/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const listing = await marketplaceSearch.getListingDetails(id);
+  res.json({ success: true, listing });
+}, 'fetch listing details'));
 
 // Get marketplace categories
-router.get('/categories', async (req, res) => {
-  try {
-    const categories = await marketplaceSearch.getCategories();
-
-    res.json({
-      success: true,
-      categories
-    });
-
-  } catch (error) {
-    logger.error('Error fetching categories:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
+router.get('/categories', asyncHandler(async (req, res) => {
+  const categories = await marketplaceSearch.getCategories();
+  res.json({ success: true, categories });
+}, 'fetch categories'));
 
 module.exports = router;
 

@@ -1,6 +1,7 @@
 const OpenAI = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
 const logger = require('../../utils/logger');
+const { detectLanguage } = require('../../utils/languageDetector');
 const marketplaceSearch = require('../search/marketplaceSearch');
 const modelManager = require('./modelManager');
 const cache = require('../cache');
@@ -13,39 +14,6 @@ const ResultValidator = require('../search/resultValidator');
 const dynamicDataManager = require('../data/dynamicDataManager');
 const messageAnalyzer = require('../analysis/messageAnalyzer');
 const searchParamsBuilder = require('../search/searchParamsBuilder');
-
-/**
- * Detect language from text message
- * Returns 'ar' if Arabic characters are detected, 'en' otherwise
- * @param {string} text - Text to analyze
- * @returns {string} - 'ar' or 'en'
- */
-function detectLanguage(text) {
-  if (!text || typeof text !== 'string') {
-    return 'ar'; // Default to Arabic
-  }
-  
-  // Check for Arabic characters (Unicode range: \u0600-\u06FF)
-  const arabicPattern = /[\u0600-\u06FF]/;
-  const hasArabic = arabicPattern.test(text);
-  
-  // Count Arabic vs English characters
-  const arabicChars = (text.match(/[\u0600-\u06FF]/g) || []).length;
-  const englishChars = (text.match(/[a-zA-Z]/g) || []).length;
-  
-  // If Arabic characters are present and more than 30% of the text, consider it Arabic
-  if (hasArabic && arabicChars > text.length * 0.1) {
-    return 'ar';
-  }
-  
-  // If mostly English characters, consider it English
-  if (englishChars > text.length * 0.5) {
-    return 'en';
-  }
-  
-  // Default to Arabic if uncertain
-  return 'ar';
-}
 
 class AIAgent {
   constructor() {

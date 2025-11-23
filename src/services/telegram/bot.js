@@ -1,6 +1,7 @@
 const { Telegraf } = require('telegraf');
 const { message } = require('telegraf/filters');
 const logger = require('../../utils/logger');
+const { detectLanguage } = require('../../utils/languageDetector');
 const aiAgent = require('../ai/agent');
 const marketplaceSearch = require('../search/marketplaceSearch');
 const audioProcessor = require('../audio/processor');
@@ -536,17 +537,6 @@ Send a voice message and I'll understand
 
       // Step 5: Detect language from transcribed text
       console.log('🎤 [VOICE-DEBUG] Step 5: Detecting language...');
-      const detectLanguage = (text) => {
-        if (!text || typeof text !== 'string') return 'ar';
-        const arabicPattern = /[\u0600-\u06FF]/;
-        const hasArabic = arabicPattern.test(text);
-        const arabicChars = (text.match(/[\u0600-\u06FF]/g) || []).length;
-        const englishChars = (text.match(/[a-zA-Z]/g) || []).length;
-        if (hasArabic && arabicChars > text.length * 0.1) return 'ar';
-        if (englishChars > text.length * 0.5) return 'en';
-        return 'ar';
-      };
-      
       const detectedLanguage = detectLanguage(transcribedText);
       console.log('🎤 [VOICE-DEBUG] Step 5: Language detected:', {
         language: detectedLanguage,
@@ -701,36 +691,6 @@ Send a voice message and I'll understand
 
     if (currentChunk) chunks.push(currentChunk.trim());
     return chunks;
-  }
-
-  /**
-   * Detect language from text
-   * @param {string} text - Text to analyze
-   * @returns {string} Language code ('ar' or 'en')
-   */
-  detectLanguage(text) {
-    if (!text || typeof text !== 'string') return 'ar';
-    const arabicPattern = /[\u0600-\u06FF]/;
-    const hasArabic = arabicPattern.test(text);
-    const arabicChars = (text.match(/[\u0600-\u06FF]/g) || []).length;
-    const totalChars = text.replace(/\s/g, '').length;
-
-    if (hasArabic && arabicChars > totalChars * 0.3) return 'ar';
-    return 'en';
-  }
-
-  /**
-   * Check if message is a greeting
-   * @param {string} text - Message text
-   * @returns {boolean} True if greeting
-   */
-  isGreeting(text) {
-    const greetings = [
-      'مرحبا', 'اهلا', 'السلام', 'هاي', 'صباح', 'مساء', 'هلا',
-      'hello', 'hi', 'hey', 'good morning', 'good evening'
-    ];
-    const lowerText = text.toLowerCase();
-    return greetings.some(g => lowerText.includes(g)) && text.length < 30;
   }
 
   async launch() {
