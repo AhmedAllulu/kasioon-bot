@@ -26,11 +26,13 @@ class AIAgent {
     }) : null;
 
     this.provider = process.env.AI_PROVIDER || 'openai'; // 'openai' or 'anthropic'
+    this.openaiModel = process.env.OPENAI_MODEL || 'gpt-4o';
 
     console.log('🤖 [AI] AI Agent initialized:', {
       provider: this.provider,
       hasOpenAI: !!this.openai,
       hasAnthropic: !!this.anthropic,
+      openaiModel: this.openaiModel,
       modelManager: 'enabled'
     });
   }
@@ -709,8 +711,10 @@ Response:
           enriched.listingUrl = `https://www.kasioon.com/listing/${result.id}/`;
         }
 
-        // Add first photo URL if images exist
-        if (result.images && Array.isArray(result.images) && result.images.length > 0) {
+        // Add first photo URL if images exist (check main_image first)
+        if (result.main_image) {
+          enriched.photoUrl = result.main_image;
+        } else if (result.images && Array.isArray(result.images) && result.images.length > 0) {
           // Handle both string URLs and objects with url property
           const firstImage = result.images[0];
           enriched.photoUrl = typeof firstImage === 'string' ? firstImage : (firstImage.url || firstImage);
@@ -950,8 +954,10 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
           message += `   🔗 الرابط: https://www.kasioon.com/listing/${item.id}/\n`;
         }
         
-        // Add photo URL if available
-        if (item.images && Array.isArray(item.images) && item.images.length > 0) {
+        // Add photo URL if available (check main_image first, then images array, then image)
+        if (item.main_image) {
+          message += `   📷 الصورة: ${item.main_image}\n`;
+        } else if (item.images && Array.isArray(item.images) && item.images.length > 0) {
           const firstImage = item.images[0];
           const photoUrl = typeof firstImage === 'string' ? firstImage : (firstImage.url || firstImage);
           message += `   📷 الصورة: ${photoUrl}\n`;
@@ -959,7 +965,7 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
           const photoUrl = typeof item.image === 'string' ? item.image : (item.image.url || item.image);
           message += `   📷 الصورة: ${photoUrl}\n`;
         }
-        
+
         message += `\n`;
       });
       return message;
@@ -968,7 +974,7 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
       results.slice(0, 7).forEach((item, index) => {
         const title = item.title || item.name || `${item.brand || ''} ${item.model || ''}`.trim() || 'Listing';
         message += `${index + 1}. ${title}\n`;
-        
+
         if (item.brand || item.model) {
           message += `   🏷️ ${item.brand || ''} ${item.model || ''}\n`;
         }
@@ -984,8 +990,8 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
           if (typeof item.location === 'string') {
             locationText = item.location;
           } else if (item.location.city) {
-            locationText = typeof item.location.city === 'string' 
-              ? item.location.city 
+            locationText = typeof item.location.city === 'string'
+              ? item.location.city
               : item.location.city.name;
             if (item.location.province && item.location.province !== locationText) {
               locationText = `${locationText}, ${item.location.province}`;
@@ -1001,14 +1007,16 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
         if (locationText) {
           message += `   📍 City: ${locationText}\n`;
         }
-        
+
         // Add listing URL
         if (item.id) {
           message += `   🔗 Link: https://www.kasioon.com/listing/${item.id}/\n`;
         }
-        
-        // Add photo URL if available
-        if (item.images && Array.isArray(item.images) && item.images.length > 0) {
+
+        // Add photo URL if available (check main_image first, then images array, then image)
+        if (item.main_image) {
+          message += `   📷 Photo: ${item.main_image}\n`;
+        } else if (item.images && Array.isArray(item.images) && item.images.length > 0) {
           const firstImage = item.images[0];
           const photoUrl = typeof firstImage === 'string' ? firstImage : (firstImage.url || firstImage);
           message += `   📷 Photo: ${photoUrl}\n`;
@@ -1750,13 +1758,13 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
         }
       });
 
+      // Note: listings table does NOT have slug or images columns
+      // Images are in separate table listing_images
       const query = `
         SELECT
           l.id,
           l.title,
           l.description,
-          l.slug,
-          l.images,
           l.created_at,
           c.${nameField} as category_name,
           c.slug as category_slug,
@@ -1767,7 +1775,8 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
            FROM listing_attribute_values lav
            JOIN listing_attributes la ON lav.attribute_id = la.id
            WHERE lav.listing_id = l.id AND la.slug = 'price'
-          ) as price
+          ) as price,
+          (SELECT url FROM listing_images li WHERE li.listing_id = l.id AND li.is_main = true LIMIT 1) as main_image
         FROM listings l
         JOIN categories c ON l.category_id = c.id
         LEFT JOIN cities city ON l.city_id = city.id
@@ -1781,13 +1790,12 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
 
       console.log(`✅ [MCP-SEARCH] Found ${result.rows.length} listings`);
 
-      // Format results
+      // Format results (no slug column in listings table, use id for URL)
       return result.rows.map(row => ({
         id: row.id,
         title: row.title,
         description: row.description,
-        slug: row.slug,
-        images: row.images,
+        main_image: row.main_image || null,
         price: row.price,
         categoryName: row.category_name,
         categorySlug: row.category_slug,
@@ -1795,7 +1803,7 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
         province: row.province,
         transactionType: row.transaction_type,
         createdAt: row.created_at,
-        listingUrl: `https://www.kasioon.com/listing/${row.slug || row.id}/`
+        listingUrl: `https://www.kasioon.com/listing/${row.id}/`
       }));
 
     } catch (error) {

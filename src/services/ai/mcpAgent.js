@@ -128,26 +128,28 @@ IMPORTANT RULES:
     return [
       {
         name: 'search_listings',
-        description: `Search listings with DYNAMIC attribute filters. First identify the category, then use its specific attributes.
+        description: `Search listings by category, title keywords, or both. SMART FALLBACK: If no results in requested city, returns results from other cities.
 
-IMPORTANT: The 'attributes' parameter accepts dynamic key-value pairs based on category.
-Examples:
-- Real estate: price, area, bedrooms, bathrooms, floor, furnished
-- Vehicles: price, year, mileage, brand, model, color, condition, transmission
-- Electronics: price, brand, model, ram, storage, condition
+IMPORTANT: You can search by:
+1. category_slug - search in a specific category
+2. title_keywords - search in listing titles (useful for colloquial terms like "طربيزات")
+3. Both - combine category and title search
 
-For numeric ranges, use: { "min": value, "max": value }
-For dates, use: { "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" }`,
+If no results found in the requested city, the tool automatically searches other cities and returns them with a note.`,
         input_schema: {
           type: 'object',
           properties: {
             category_slug: {
               type: 'string',
-              description: 'LEAF category slug (MUST be a leaf category with no children). Examples: apartments, houses, cars, laptops'
+              description: 'LEAF category slug (optional). Examples: apartments, houses, cars, coffee-side-tables'
+            },
+            title_keywords: {
+              type: 'string',
+              description: 'Keywords to search in listing titles (e.g., "طربيزات", "موبايل سامسونج"). Use this for colloquial/dialect terms.'
             },
             city_name: {
               type: 'string',
-              description: 'City name in Arabic or English (e.g., "دمشق", "Damascus")'
+              description: 'City name in Arabic (e.g., "دمشق", "إدلب", "حلب")'
             },
             transaction_type: {
               type: 'string',
@@ -156,18 +158,7 @@ For dates, use: { "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" }`,
             },
             attributes: {
               type: 'object',
-              description: `Dynamic attribute filters as key-value pairs. Keys are attribute slugs.
-
-For number attributes: use exact value OR { "min": X, "max": Y }
-For boolean attributes: true/false
-For select/multiselect: use the option value
-For text: partial match string
-For date: { "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" }
-
-Common attribute slugs by category:
-- Real Estate: price, area, bedrooms, bathrooms, floor, furnished, parking
-- Vehicles: price, year, mileage, brand, model, color, transmission, fuel_type
-- Electronics: price, brand, model, ram, storage, screen_size, condition`,
+              description: 'Dynamic attribute filters (price, area, bedrooms, etc.)',
               additionalProperties: true
             },
             limit: {
@@ -176,7 +167,7 @@ Common attribute slugs by category:
               default: 10
             }
           },
-          required: ['category_slug']
+          required: []
         }
       },
       {
@@ -293,6 +284,20 @@ Common attribute slugs by category:
           },
           required: ['keywords']
         }
+      },
+      {
+        name: 'search_listings_for_hints',
+        description: '🆕 Search in listing titles to discover which category a keyword belongs to. Useful for colloquial language (e.g., "طربيزات" → finds in "طاولات صغيرة" category). Returns 5 listings with their categories as hints.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            keywords: {
+              type: 'string',
+              description: 'Keywords to search for in listing titles (e.g., "أرض", "طربيزة", "موبايل")'
+            }
+          },
+          required: ['keywords']
+        }
       }
     ];
   }
@@ -310,6 +315,7 @@ Common attribute slugs by category:
       return cached.data;
     }
 
+    // Note: unit_ar and unit_en are ARRAY types, get first element
     const query = `
       SELECT
         la.id,
@@ -319,8 +325,8 @@ Common attribute slugs by category:
         la.type,
         la.validation_rules,
         la.options,
-        la.unit_ar,
-        la.unit_en,
+        la.unit_ar[1] as unit_ar,
+        la.unit_en[1] as unit_en,
         la.min_value,
         la.max_value,
         ca.is_required,
@@ -410,6 +416,8 @@ Common attribute slugs by category:
         return this.findCategory(toolInput);
       case 'deep_search_categories':
         return this.deepSearchCategories(toolInput);
+      case 'search_listings_for_hints':
+        return this.searchListingsForHints(toolInput);
       default:
         throw new Error(`Unknown tool: ${toolName}`);
     }
@@ -426,6 +434,7 @@ Common attribute slugs by category:
       city_name,
       transaction_type,
       attributes = {},
+      title_keywords,
       limit = 10
     } = params;
 
@@ -433,68 +442,76 @@ Common attribute slugs by category:
       category_slug,
       city_name,
       transaction_type,
+      title_keywords,
       attributeCount: Object.keys(attributes).length,
       limit
     });
 
     try {
-      // 1. Get category and verify it's a LEAF category
-      const categoryQuery = `
-        SELECT id, name_ar, slug
-        FROM categories c
-        WHERE c.slug = $1 AND c.is_active = true
-      `;
-      const categoryResult = await this.pool.query(categoryQuery, [category_slug]);
+      let category = null;
 
-      if (categoryResult.rows.length === 0) {
-        return {
-          listings: [],
-          count: 0,
-          message: `الفئة "${category_slug}" غير موجودة`
-        };
+      // 1. Get category if provided
+      if (category_slug) {
+        const categoryQuery = `
+          SELECT id, name_ar, slug
+          FROM categories c
+          WHERE c.slug = $1 AND c.is_active = true
+        `;
+        const categoryResult = await this.pool.query(categoryQuery, [category_slug]);
+        if (categoryResult.rows.length > 0) {
+          category = categoryResult.rows[0];
+        }
       }
 
-      const category = categoryResult.rows[0];
-
-      // 2. Build simple query - NO attribute subqueries
+      // 2. Build query - search by title keywords OR category
       let query = `
         SELECT
-          l.id, l.title, l.slug,
+          l.id, l.title,
           c.name_ar as category,
           ct.name_ar as city,
-          tt.name_ar as transaction_type,
-          l.images
+          tt.name_ar as transaction_type
         FROM listings l
         JOIN categories c ON l.category_id = c.id
         LEFT JOIN cities ct ON l.city_id = ct.id
         LEFT JOIN transaction_types tt ON l.transaction_type_id = tt.id
         WHERE l.status = 'active'
-          AND l.category_id = $1
       `;
 
-      const queryParams = [category.id];
-      let paramIndex = 2;
+      const queryParams = [];
+      let paramIndex = 1;
 
-      // 3. City filter
+      // 3. Category filter (optional now)
+      if (category) {
+        query += ` AND l.category_id = $${paramIndex}`;
+        queryParams.push(category.id);
+        paramIndex++;
+      }
+
+      // 4. City/Province filter - search in city name OR province name
       if (city_name) {
-        query += ` AND ct.name_ar ILIKE $${paramIndex}`;
+        query += ` AND (ct.name_ar ILIKE $${paramIndex} OR ct.province_ar ILIKE $${paramIndex})`;
         queryParams.push(`%${city_name}%`);
         paramIndex++;
       }
 
-      // 4. Transaction filter
+      // 5. Transaction filter
       if (transaction_type) {
         query += ` AND tt.slug = $${paramIndex}`;
         queryParams.push(transaction_type);
         paramIndex++;
       }
 
-      // 5. Attribute filters - only for critical attributes
+      // 6. Title keywords filter (NEW!)
+      if (title_keywords) {
+        query += ` AND l.title ILIKE $${paramIndex}`;
+        queryParams.push(`%${title_keywords}%`);
+        paramIndex++;
+      }
+
+      // 7. Attribute filters
       const criticalAttrs = ['price', 'area', 'rooms', 'bedrooms'];
       for (const [attrSlug, attrValue] of Object.entries(attributes)) {
         if (!criticalAttrs.includes(attrSlug)) continue;
-
-        // Simple EXISTS check instead of complex subquery
         query += ` AND EXISTS (
           SELECT 1 FROM listing_attribute_values lav
           JOIN listing_attributes la ON lav.attribute_id = la.id
@@ -506,32 +523,106 @@ Common attribute slugs by category:
         paramIndex++;
       }
 
-      // 6. Order and limit
+      // 8. Order and limit
       query += ` ORDER BY l.is_boosted DESC, l.created_at DESC LIMIT $${paramIndex}`;
       queryParams.push(Math.min(limit, 20));
 
-      // 7. Execute query
+      // 9. Execute main query
       const result = await this.pool.query(query, queryParams);
-
       console.log(`✅ [MCP-AGENT] Found ${result.rows.length} listings`);
 
-      // 8. Simple formatting
+      // 10. If no results with city filter, try without city (fallback)
+      let fallbackListings = [];
+      let fallbackMessage = null;
+
+      if (result.rows.length === 0 && city_name && (category || title_keywords)) {
+        console.log(`🔄 [MCP-AGENT] No results in ${city_name}, searching without city filter...`);
+
+        let fallbackQuery = `
+          SELECT
+            l.id, l.title,
+            c.name_ar as category,
+            ct.name_ar as city,
+            tt.name_ar as transaction_type
+          FROM listings l
+          JOIN categories c ON l.category_id = c.id
+          LEFT JOIN cities ct ON l.city_id = ct.id
+          LEFT JOIN transaction_types tt ON l.transaction_type_id = tt.id
+          WHERE l.status = 'active'
+        `;
+
+        const fallbackParams = [];
+        let fbParamIndex = 1;
+
+        if (category) {
+          fallbackQuery += ` AND l.category_id = $${fbParamIndex}`;
+          fallbackParams.push(category.id);
+          fbParamIndex++;
+        }
+
+        if (title_keywords) {
+          fallbackQuery += ` AND l.title ILIKE $${fbParamIndex}`;
+          fallbackParams.push(`%${title_keywords}%`);
+          fbParamIndex++;
+        }
+
+        fallbackQuery += ` ORDER BY l.is_boosted DESC, l.created_at DESC LIMIT $${fbParamIndex}`;
+        fallbackParams.push(Math.min(limit, 10));
+
+        const fallbackResult = await this.pool.query(fallbackQuery, fallbackParams);
+
+        if (fallbackResult.rows.length > 0) {
+          fallbackListings = fallbackResult.rows.map(row => ({
+            id: row.id,
+            title: row.title,
+            category: row.category,
+            city: row.city,
+            transaction_type: row.transaction_type,
+            listing_url: `${this.websiteUrl}/listing/${row.id}/`
+          }));
+          fallbackMessage = `لم أجد نتائج في "${city_name}"، لكن وجدت ${fallbackListings.length} إعلان في مدن أخرى`;
+          console.log(`✅ [MCP-AGENT] Fallback found ${fallbackListings.length} listings in other cities`);
+        }
+      }
+
+      // 11. Format results
       const listings = result.rows.map(row => ({
         id: row.id,
         title: row.title,
-        slug: row.slug,
         category: row.category,
         city: row.city,
         transaction_type: row.transaction_type,
-        images: this.parseImages(row.images),
-        listing_url: `${this.websiteUrl}/listing/${row.slug || row.id}`
+        listing_url: `${this.websiteUrl}/listing/${row.id}/`
       }));
 
-      return {
-        listings,
-        count: listings.length,
-        category: category.name_ar
-      };
+      // 12. Return with smart message
+      if (listings.length > 0) {
+        return {
+          listings,
+          count: listings.length,
+          category: category?.name_ar || 'بحث حر',
+          city_searched: city_name
+        };
+      } else if (fallbackListings.length > 0) {
+        return {
+          listings: fallbackListings,
+          count: fallbackListings.length,
+          category: category?.name_ar || 'بحث حر',
+          city_searched: city_name,
+          message: fallbackMessage,
+          note: 'النتائج من مدن أخرى لأنه لا توجد نتائج في المدينة المطلوبة'
+        };
+      } else {
+        return {
+          listings: [],
+          count: 0,
+          category: category?.name_ar,
+          city_searched: city_name,
+          message: category
+            ? `لا توجد إعلانات في فئة "${category.name_ar}"${city_name ? ` في ${city_name}` : ''}`
+            : `لا توجد إعلانات مطابقة للبحث`
+        };
+      }
 
     } catch (error) {
       console.error('❌ [MCP-AGENT] Search error:', error);
@@ -691,13 +782,18 @@ Common attribute slugs by category:
   async getListingDetails(params) {
     const { listing_id, slug } = params;
 
-    if (!listing_id && !slug) {
-      throw new Error('Either listing_id or slug is required');
+    // Note: listings table does NOT have slug column, search by id only
+    // If slug is provided, treat it as id (for backwards compatibility)
+    const searchId = listing_id || slug;
+
+    if (!searchId) {
+      throw new Error('listing_id is required');
     }
 
+    // NO images - query only text data
     let query = `
       SELECT
-        l.id, l.title, l.slug, l.images,
+        l.id, l.title,
         c.name_ar as category, c.slug as category_slug,
         ct.name_ar as city, ct.province_ar as province,
         tt.name_ar as transaction_type
@@ -706,16 +802,9 @@ Common attribute slugs by category:
       LEFT JOIN cities ct ON l.city_id = ct.id
       LEFT JOIN transaction_types tt ON l.transaction_type_id = tt.id
       WHERE l.status = 'active'
+        AND l.id = $1
     `;
-    const queryParams = [];
-
-    if (listing_id) {
-      query += ` AND l.id = $1`;
-      queryParams.push(listing_id);
-    } else {
-      query += ` AND l.slug = $1`;
-      queryParams.push(slug);
-    }
+    const queryParams = [searchId];
 
     try {
       const listingResult = await this.pool.query(query, queryParams);
@@ -745,8 +834,8 @@ Common attribute slugs by category:
         listing.attributes[attr.name_ar] = attr.value_number || attr.value_text;
       });
 
-      listing.images = this.parseImages(listing.images);
-      listing.listing_url = `${this.websiteUrl}/listing/${listing.slug || listing.id}`;
+      // NO images - only URL
+      listing.listing_url = `${this.websiteUrl}/listing/${listing.id}/`;
 
       console.log(`✅ [MCP-AGENT] Found listing details with ${attrsResult.rows.length} attributes`);
       return { listing };
@@ -757,10 +846,167 @@ Common attribute slugs by category:
     }
   }
 
+  /**
+   * 🆕 Search listings for hints - discover category from listing titles
+   * البحث في عناوين الإعلانات لاكتشاف الفئة المناسبة
+   * Useful for colloquial language (e.g., "طربيزات" → "طاولات صغيرة")
+   */
+  async searchListingsForHints(params) {
+    const { keywords } = params;
+
+    // Generate variations for search
+    const keywordVariations = this.generateKeywordVariations(keywords);
+
+    console.log(`📋 [MCP-AGENT] Searching listings for hints: "${keywords}" (${keywordVariations.length} variations)`);
+
+    // Build ILIKE conditions for all variations
+    const ilikeConds = keywordVariations.map((_, idx) => `l.title ILIKE '%' || $${idx + 1} || '%'`).join(' OR ');
+
+    const query = `
+      SELECT
+        l.id,
+        l.title,
+        c.id as category_id,
+        c.slug as category_slug,
+        c.name_ar as category_name,
+        c.path as category_path,
+        p.name_ar as parent_category_name,
+        NOT EXISTS (
+          SELECT 1 FROM categories child
+          WHERE child.parent_id = c.id AND child.is_active = true
+        ) as is_leaf_category
+      FROM listings l
+      JOIN categories c ON l.category_id = c.id
+      LEFT JOIN categories p ON c.parent_id = p.id
+      WHERE l.status = 'active'
+        AND (${ilikeConds})
+      ORDER BY l.created_at DESC
+      LIMIT 5
+    `;
+
+    try {
+      const result = await this.pool.query(query, keywordVariations);
+
+      console.log(`✅ [MCP-AGENT] Found ${result.rows.length} listing hints for "${keywords}"`);
+
+      // Log hints for debugging
+      result.rows.forEach((hint, idx) => {
+        console.log(`   ${idx + 1}. "${hint.title}" → ${hint.category_name} (${hint.category_slug})`);
+      });
+
+      // Extract unique categories from hints
+      const categoryMap = new Map();
+      result.rows.forEach(row => {
+        if (!categoryMap.has(row.category_id)) {
+          categoryMap.set(row.category_id, {
+            id: row.category_id,
+            slug: row.category_slug,
+            name_ar: row.category_name,
+            path: row.category_path,
+            parent_name: row.parent_category_name,
+            is_leaf: row.is_leaf_category,
+            examples: []
+          });
+        }
+        categoryMap.get(row.category_id).examples.push(row.title.substring(0, 50));
+      });
+
+      const suggestedCategories = Array.from(categoryMap.values());
+
+      return {
+        hints: result.rows.map(row => ({
+          listing_id: row.id,
+          title: row.title,
+          category_slug: row.category_slug,
+          category_name: row.category_name,
+          is_leaf: row.is_leaf_category
+        })),
+        suggested_categories: suggestedCategories,
+        count: result.rows.length,
+        message: suggestedCategories.length > 0
+          ? `Found ${suggestedCategories.length} categories from listing hints. Best match: "${suggestedCategories[0].name_ar}" (${suggestedCategories[0].slug})`
+          : `No listings found with "${keywords}" in title. Try a different keyword.`
+      };
+
+    } catch (error) {
+      console.error('❌ [MCP-AGENT] Listing hints query error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 🆕 Generate Arabic keyword variations (singular/plural forms)
+   * توليد اشتقاقات الكلمات العربية (مفرد/جمع)
+   */
+  generateKeywordVariations(keyword) {
+    const variations = new Set([keyword.trim()]);
+    const word = keyword.trim();
+
+    // Common Arabic singular → plural patterns
+    const patterns = [
+      // أرض → أراضي (فعل → أفاعيل)
+      { singular: /^(.)(.)(.?)$/, plural: (m) => `أ${m[1]}ا${m[2]}ي` },
+      // سيارة → سيارات (فعالة → فعالات)
+      { check: (w) => w.endsWith('ة'), transform: (w) => w.slice(0, -1) + 'ات' },
+      // موبايل → موبايلات
+      { check: (w) => !w.endsWith('ات') && !w.endsWith('ة'), transform: (w) => w + 'ات' },
+      // مركبة → مركبات
+      { check: (w) => w.endsWith('ة'), transform: (w) => w.slice(0, -1) + 'ات' },
+    ];
+
+    // Specific known mappings (قاموس معروف)
+    const knownMappings = {
+      'أرض': ['أراضي', 'أراضٍ', 'ارض', 'اراضي', 'land', 'lands'],
+      'ارض': ['أراضي', 'أراضٍ', 'أرض', 'اراضي', 'land', 'lands'],
+      'سيارة': ['سيارات', 'مركبة', 'مركبات', 'car', 'cars', 'vehicle'],
+      'سيارات': ['سيارة', 'مركبة', 'مركبات', 'car', 'cars', 'vehicle'],
+      'شقة': ['شقق', 'apartment', 'apartments', 'flat'],
+      'شقق': ['شقة', 'apartment', 'apartments', 'flat'],
+      'موبايل': ['موبايلات', 'جوال', 'جوالات', 'هاتف', 'هواتف', 'mobile', 'phone'],
+      'موبايلات': ['موبايل', 'جوال', 'جوالات', 'هاتف', 'هواتف', 'mobile', 'phone'],
+      'مركبة': ['مركبات', 'سيارة', 'سيارات', 'vehicle', 'vehicles'],
+      'مركبات': ['مركبة', 'سيارة', 'سيارات', 'vehicle', 'vehicles'],
+      'عقار': ['عقارات', 'real-estate', 'property'],
+      'عقارات': ['عقار', 'real-estate', 'property'],
+      'منزل': ['منازل', 'بيت', 'بيوت', 'house', 'home'],
+      'بيت': ['بيوت', 'منزل', 'منازل', 'house', 'home'],
+      'فيلا': ['فلل', 'فيلات', 'villa', 'villas'],
+      'محل': ['محلات', 'محال', 'shop', 'store'],
+      'مزرعة': ['مزارع', 'farm', 'farms'],
+      'دراجة': ['دراجات', 'موتور', 'موتورات', 'motorcycle', 'bike'],
+      'land': ['lands', 'أرض', 'أراضي', 'ارض', 'اراضي'],
+      'car': ['cars', 'سيارة', 'سيارات', 'مركبة'],
+      'apartment': ['apartments', 'flat', 'شقة', 'شقق'],
+      'phone': ['phones', 'mobile', 'موبايل', 'جوال'],
+    };
+
+    // Add known mappings
+    const lowerWord = word.toLowerCase();
+    if (knownMappings[word]) {
+      knownMappings[word].forEach(v => variations.add(v));
+    }
+    if (knownMappings[lowerWord]) {
+      knownMappings[lowerWord].forEach(v => variations.add(v));
+    }
+
+    // Try pattern-based transformations
+    patterns.forEach(pattern => {
+      if (pattern.check && pattern.check(word)) {
+        variations.add(pattern.transform(word));
+      }
+    });
+
+    // Add without diacritics (تشكيل)
+    const withoutDiacritics = word.replace(/[\u064B-\u065F\u0670]/g, '');
+    variations.add(withoutDiacritics);
+
+    console.log(`🔑 [MCP-AGENT] Keyword variations for "${keyword}":`, Array.from(variations));
+    return Array.from(variations);
+  }
 
   /**
    * Find matching LEAF category based on keywords
-   * Enhanced to search in descriptions and support parent filtering
+   * 🆕 PARALLEL SEARCH: Searches categories AND listings simultaneously, then analyzes combined results
    */
   async findCategory(params) {
     const {
@@ -769,9 +1015,28 @@ Common attribute slugs by category:
       search_in_description = true
     } = params;
 
-    console.log(`🔍 [MCP-AGENT] Finding category with keywords: "${keywords}", parent_id: ${parent_id}, search_in_description: ${search_in_description}`);
+    // 🆕 Generate keyword variations
+    const keywordVariations = this.generateKeywordVariations(keywords);
 
-    // Build dynamic query based on parameters
+    console.log(`🔍 [MCP-AGENT] Finding category with keywords: "${keywords}" + ${keywordVariations.length - 1} variations`);
+    console.log(`   Variations: ${keywordVariations.join(', ')}`);
+
+    // 🆕 PARALLEL SEARCH: Search categories and listings at the same time
+    const listingSearchPromise = this.searchListingsForHints({ keywords });
+    console.log(`📋 [MCP-AGENT] Started parallel listing search for "${keywords}"`);
+
+    // 🆕 Build dynamic query to search for ALL keyword variations
+    // Create placeholders for each variation
+    const placeholders = keywordVariations.map((_, idx) => `$${idx + 1}`);
+    const queryParams = [...keywordVariations];
+
+    // Build CASE for match scoring - check all variations
+    const exactMatchConditions = placeholders.map(p => `c.name_ar = ${p} OR c.name_en = ${p}`).join(' OR ');
+    const startsWithConditions = placeholders.map(p => `c.name_ar ILIKE ${p} || '%' OR c.name_en ILIKE ${p} || '%'`).join(' OR ');
+    const containsNameConditions = placeholders.map(p => `c.name_ar ILIKE '%' || ${p} || '%' OR c.name_en ILIKE '%' || ${p} || '%'`).join(' OR ');
+    const slugConditions = placeholders.map(p => `c.slug ILIKE '%' || ${p} || '%'`).join(' OR ');
+    const descConditions = placeholders.map(p => `c.description_ar ILIKE '%' || ${p} || '%' OR c.description_en ILIKE '%' || ${p} || '%'`).join(' OR ');
+
     let query = `
       SELECT
         c.id,
@@ -790,21 +1055,21 @@ Common attribute slugs by category:
         ) as is_leaf,
         CASE
           -- Exact match in name (highest priority)
-          WHEN c.name_ar = $1 OR c.name_en = $1 THEN 100
+          WHEN ${exactMatchConditions} THEN 100
           -- Starts with keyword in name
-          WHEN c.name_ar ILIKE $1 || '%' OR c.name_en ILIKE $1 || '%' THEN 90
+          WHEN ${startsWithConditions} THEN 90
           -- Contains keyword in name
-          WHEN c.name_ar ILIKE '%' || $1 || '%' OR c.name_en ILIKE '%' || $1 || '%' THEN 70
+          WHEN ${containsNameConditions} THEN 70
           -- Slug match
-          WHEN c.slug ILIKE '%' || $1 || '%' THEN 60
+          WHEN ${slugConditions} THEN 60
           -- Description match (lower priority)
-          WHEN c.description_ar ILIKE '%' || $1 || '%' OR c.description_en ILIKE '%' || $1 || '%' THEN 50
+          WHEN ${descConditions} THEN 50
           ELSE 40
         END as match_score,
         CASE
-          WHEN c.name_ar ILIKE '%' || $1 || '%' OR c.name_en ILIKE '%' || $1 || '%' THEN 'name'
-          WHEN c.slug ILIKE '%' || $1 || '%' THEN 'slug'
-          WHEN c.description_ar ILIKE '%' || $1 || '%' OR c.description_en ILIKE '%' || $1 || '%' THEN 'description'
+          WHEN ${containsNameConditions} THEN 'name'
+          WHEN ${slugConditions} THEN 'slug'
+          WHEN ${descConditions} THEN 'description'
           ELSE 'none'
         END as matched_field
       FROM categories c
@@ -812,8 +1077,7 @@ Common attribute slugs by category:
       WHERE c.is_active = true
     `;
 
-    const queryParams = [keywords];
-    let paramIndex = 2;
+    let paramIndex = keywordVariations.length + 1;
 
     // Add parent_id filter if specified
     if (parent_id) {
@@ -822,21 +1086,11 @@ Common attribute slugs by category:
       paramIndex++;
     }
 
-    // Add search conditions
+    // Add search conditions - search for ANY of the variations
     if (search_in_description) {
-      query += ` AND (
-        c.name_ar ILIKE '%' || $1 || '%' OR
-        c.name_en ILIKE '%' || $1 || '%' OR
-        c.slug ILIKE '%' || $1 || '%' OR
-        c.description_ar ILIKE '%' || $1 || '%' OR
-        c.description_en ILIKE '%' || $1 || '%'
-      )`;
+      query += ` AND (${containsNameConditions} OR ${slugConditions} OR ${descConditions})`;
     } else {
-      query += ` AND (
-        c.name_ar ILIKE '%' || $1 || '%' OR
-        c.name_en ILIKE '%' || $1 || '%' OR
-        c.slug ILIKE '%' || $1 || '%'
-      )`;
+      query += ` AND (${containsNameConditions} OR ${slugConditions})`;
     }
 
     query += `
@@ -857,8 +1111,45 @@ Common attribute slugs by category:
         console.log(`   ${idx + 1}. ${cat.name_ar} (${cat.slug}) - Score: ${cat.match_score}, Field: ${cat.matched_field}, IsLeaf: ${cat.is_leaf}`);
       });
 
+      // 🆕 WAIT FOR PARALLEL LISTING SEARCH
+      const listingHints = await listingSearchPromise;
+      console.log(`📋 [MCP-AGENT] Listing search completed: ${listingHints.count} hints found`);
+
+      // 🆕 ANALYZE COMBINED RESULTS
       const leafCategories = result.rows.filter(c => c.is_leaf);
-      const bestMatch = leafCategories.length > 0 ? leafCategories[0] : result.rows[0];
+      let bestMatch = leafCategories.length > 0 ? leafCategories[0] : result.rows[0];
+
+      // If no category found from direct search, use listing hints
+      if (!bestMatch && listingHints.suggested_categories?.length > 0) {
+        const suggestedCat = listingHints.suggested_categories[0];
+        bestMatch = {
+          id: suggestedCat.id,
+          name_ar: suggestedCat.name_ar,
+          slug: suggestedCat.slug,
+          is_leaf: suggestedCat.is_leaf,
+          match_score: 75,
+          matched_field: 'listing_title',
+          parent_name: suggestedCat.parent_name
+        };
+        console.log(`✅ [MCP-AGENT] Using category from listing hints: ${suggestedCat.name_ar} (${suggestedCat.slug})`);
+      }
+
+      // If category found but listing hints suggest a more specific leaf category
+      if (bestMatch && !bestMatch.is_leaf && listingHints.suggested_categories?.length > 0) {
+        const leafFromHints = listingHints.suggested_categories.find(c => c.is_leaf);
+        if (leafFromHints) {
+          console.log(`🔄 [MCP-AGENT] Upgrading to leaf category from hints: ${leafFromHints.name_ar}`);
+          bestMatch = {
+            id: leafFromHints.id,
+            name_ar: leafFromHints.name_ar,
+            slug: leafFromHints.slug,
+            is_leaf: true,
+            match_score: 80,
+            matched_field: 'listing_title',
+            parent_name: leafFromHints.parent_name
+          };
+        }
+      }
 
       // Build parent context for non-leaf categories
       const categoriesWithContext = result.rows.map(cat => ({
@@ -890,6 +1181,7 @@ Common attribute slugs by category:
         } : null,
         leaf_count: leafCategories.length,
         total_count: result.rows.length,
+        listing_hints: listingHints,
         suggestion: bestMatch
           ? `Found "${bestMatch.name_ar}" (slug: "${bestMatch.slug}"). ${bestMatch.is_leaf ? 'This is a leaf category - ready to search!' : 'This is NOT a leaf category - get child categories first.'}`
           : parent_id
@@ -918,6 +1210,7 @@ Common attribute slugs by category:
 
     try {
       // Step 1: Get all categories up to max_depth
+      // Note: Using explicit text[] cast to avoid PostgreSQL type mismatch errors
       let baseQuery = `
         WITH RECURSIVE category_tree AS (
           -- Base case: root categories or specified root
@@ -930,8 +1223,8 @@ Common attribute slugs by category:
             c.description_en,
             c.level,
             c.parent_id,
-            ARRAY[c.id] as path_ids,
-            ARRAY[c.name_ar] as path_names,
+            ARRAY[c.id::text]::text[] as path_ids,
+            ARRAY[c.name_ar::text]::text[] as path_names,
             NOT EXISTS (
               SELECT 1 FROM categories child
               WHERE child.parent_id = c.id AND child.is_active = true
@@ -965,8 +1258,8 @@ Common attribute slugs by category:
             c.description_en,
             c.level,
             c.parent_id,
-            ct.path_ids || c.id,
-            ct.path_names || c.name_ar,
+            (ct.path_ids || c.id::text)::text[],
+            (ct.path_names || c.name_ar::text)::text[],
             NOT EXISTS (
               SELECT 1 FROM categories child
               WHERE child.parent_id = c.id AND child.is_active = true
