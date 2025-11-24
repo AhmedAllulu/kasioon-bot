@@ -279,106 +279,101 @@ Send a voice message and I'll understand
         return;
       }
 
-      // Classify user intent using the new Intent Classifier with context
-      const intentResult = intentClassifier.classify(userMessage, {
-        lastIntent: userContext.lastIntent,
-        lastSearchParams: userContext.lastSearchParams
-      });
-
-      logger.info(`[INTENT] Classified as: ${intentResult.intent} (confidence: ${intentResult.confidence})`);
-
       // Update context with current message
       contextManager.updateContext(userId, {
         lastMessage: userMessage,
-        lastIntent: intentResult.intent,
-        lastIntentConfidence: intentResult.confidence,
         preferredLanguage: language
       });
 
-      // Handle different intents
-      switch (intentResult.intent) {
-        case intentClassifier.intentTypes.GREETING:
-          const greeting = responseFormatter.formatGreeting(ctx.from.first_name, language);
-          await ctx.reply(greeting, { parse_mode: 'Markdown' });
-          return;
+      // ========== MCP MODE: BYPASS INTENT CLASSIFICATION ==========
+      // In MCP mode, let the AI agent handle all natural language understanding
+      // This provides more intelligent and contextual responses
+      if (USE_MCP_AGENT) {
+        logger.info(`[MCP] Bypassing intent classification, sending directly to MCP Agent`);
+        // Continue to MCP search flow below
+      } else {
+        // ========== LEGACY MODE: USE INTENT CLASSIFICATION ==========
+        // Classify user intent using the Intent Classifier with context
+        const intentResult = intentClassifier.classify(userMessage, {
+          lastIntent: userContext.lastIntent,
+          lastSearchParams: userContext.lastSearchParams
+        });
 
-        case intentClassifier.intentTypes.HELP:
-          const helpMessage = language === 'ar'
-            ? `🤖 *كيف يمكنني مساعدتك؟*\n\nأنا بوت ذكي للبحث في السوق السوري. يمكنني مساعدتك في:\n\n• 🔍 البحث عن منتجات (سيارات، عقارات، إلكترونيات، إلخ)\n• 📍 تحديد الموقع والمدينة\n• 💰 تحديد نطاق السعر\n• 🎯 تطبيق فلاتر البحث المتقدمة\n\n*أمثلة على طلبات البحث:*\n• "سيارة للبيع في دمشق"\n• "شقة للإيجار في حلب بسعر أقل من 500 ألف"\n• "موبايل سامسونج مستعمل"\n\nجرب الآن! 👇`
-            : `🤖 *How can I help you?*\n\nI'm an intelligent bot for searching the Syrian marketplace. I can help you with:\n\n• 🔍 Searching for products (cars, real estate, electronics, etc.)\n• 📍 Specifying location and city\n• 💰 Setting price ranges\n• 🎯 Applying advanced search filters\n\n*Example search queries:*\n• "car for sale in Damascus"\n• "apartment for rent in Aleppo under 500k"\n• "used Samsung phone"\n\nTry it now! 👇`;
-          await ctx.reply(helpMessage, { parse_mode: 'Markdown' });
-          return;
+        logger.info(`[INTENT] Classified as: ${intentResult.intent} (confidence: ${intentResult.confidence})`);
 
-        case intentClassifier.intentTypes.GOODBYE:
-          const goodbyeMessage = language === 'ar'
-            ? 'مع السلامة! سعدت بمساعدتك 👋\nإذا احتجت شي ثاني، أنا هنا! 😊'
-            : 'Goodbye! Happy to help you 👋\nIf you need anything else, I\'m here! 😊';
-          await ctx.reply(goodbyeMessage);
-          return;
+        // Update context with intent
+        contextManager.updateContext(userId, {
+          lastIntent: intentResult.intent,
+          lastIntentConfidence: intentResult.confidence
+        });
 
-        case intentClassifier.intentTypes.FEEDBACK:
-          const sentiment = intentResult.sentiment || 'neutral';
-          const feedbackResponse = sentiment === 'positive'
-            ? (language === 'ar' ? '😊 شكراً على ملاحظاتك الإيجابية! سعيد أنني ساعدتك' : '😊 Thanks for the positive feedback! Happy I could help')
-            : sentiment === 'negative'
-            ? (language === 'ar' ? '😔 عذراً إذا لم تكن النتائج كما توقعت. جرب تعديل معايير البحث' : '😔 Sorry the results weren\'t what you expected. Try adjusting your search criteria')
-            : (language === 'ar' ? 'شكراً على ملاحظاتك!' : 'Thanks for your feedback!');
-          await ctx.reply(feedbackResponse);
-          return;
+        // Handle different intents (legacy mode only)
+        switch (intentResult.intent) {
+          case intentClassifier.intentTypes.GREETING:
+            const greeting = responseFormatter.formatGreeting(ctx.from.first_name, language);
+            await ctx.reply(greeting, { parse_mode: 'Markdown' });
+            return;
 
-        case intentClassifier.intentTypes.COMPLAINT:
-          const complaintMessage = language === 'ar'
-            ? '😔 *نأسف لوجود مشكلة*\n\nنحن نعمل باستمرار على تحسين الخدمة. يمكنك:\n\n• 🔄 إعادة المحاولة بصيغة مختلفة\n• 📝 وصف المشكلة بالتفصيل\n• 📞 التواصل مع الدعم الفني\n\nكيف يمكنني مساعدتك؟'
-            : '😔 *Sorry to hear about the issue*\n\nWe\'re constantly working to improve our service. You can:\n\n• 🔄 Try again with different wording\n• 📝 Describe the problem in detail\n• 📞 Contact technical support\n\nHow can I help you?';
-          await ctx.reply(complaintMessage, { parse_mode: 'Markdown' });
-          return;
+          case intentClassifier.intentTypes.HELP:
+            const helpMessage = language === 'ar'
+              ? `🤖 *كيف يمكنني مساعدتك؟*\n\nأنا بوت ذكي للبحث في السوق السوري. يمكنني مساعدتك في:\n\n• 🔍 البحث عن منتجات (سيارات، عقارات، إلكترونيات، إلخ)\n• 📍 تحديد الموقع والمدينة\n• 💰 تحديد نطاق السعر\n• 🎯 تطبيق فلاتر البحث المتقدمة\n\n*أمثلة على طلبات البحث:*\n• "سيارة للبيع في دمشق"\n• "شقة للإيجار في حلب بسعر أقل من 500 ألف"\n• "موبايل سامسونج مستعمل"\n\nجرب الآن! 👇`
+              : `🤖 *How can I help you?*\n\nI'm an intelligent bot for searching the Syrian marketplace. I can help you with:\n\n• 🔍 Searching for products (cars, real estate, electronics, etc.)\n• 📍 Specifying location and city\n• 💰 Setting price ranges\n• 🎯 Applying advanced search filters\n\n*Example search queries:*\n• "car for sale in Damascus"\n• "apartment for rent in Aleppo under 500k"\n• "used Samsung phone"\n\nTry it now! 👇`;
+            await ctx.reply(helpMessage, { parse_mode: 'Markdown' });
+            return;
 
-        case intentClassifier.intentTypes.CONTACT:
-          const contactMessage = language === 'ar'
-            ? '📞 *معلومات التواصل*\n\nللتواصل مع فريق الدعم:\n\n• 💬 يمكنك التواصل مباشرة من خلال هذا البوت\n• 📧 البريد: support@kasioon.com\n• 🌐 الموقع: www.kasioon.com\n\nأو يمكنني مساعدتك مباشرة. ما الذي تحتاجه؟'
-            : '📞 *Contact Information*\n\nTo contact our support team:\n\n• 💬 You can reach out directly through this bot\n• 📧 Email: support@kasioon.com\n• 🌐 Website: www.kasioon.com\n\nOr I can help you directly. What do you need?';
-          await ctx.reply(contactMessage, { parse_mode: 'Markdown' });
-          return;
+          case intentClassifier.intentTypes.GOODBYE:
+            const goodbyeMessage = language === 'ar'
+              ? 'مع السلامة! سعدت بمساعدتك 👋\nإذا احتجت شي ثاني، أنا هنا! 😊'
+              : 'Goodbye! Happy to help you 👋\nIf you need anything else, I\'m here! 😊';
+            await ctx.reply(goodbyeMessage);
+            return;
 
-        case intentClassifier.intentTypes.PRODUCT_INFO:
-          const productInfoMessage = language === 'ar'
-            ? '📋 *معلومات المنتج*\n\nيمكنني مساعدتك في الحصول على معلومات تفصيلية عن أي منتج!\n\nلعرض المعلومات، ابحث عن المنتج أولاً ثم اختر النتيجة التي تريدها.\n\n💡 *جرب البحث الآن:*\nمثال: "سيارة تويوتا 2020"'
-            : '📋 *Product Information*\n\nI can help you get detailed information about any product!\n\nTo view details, search for the product first, then select the result you want.\n\n💡 *Try searching now:*\nExample: "Toyota car 2020"';
-          await ctx.reply(productInfoMessage, { parse_mode: 'Markdown' });
-          return;
+          case intentClassifier.intentTypes.FEEDBACK:
+            const sentiment = intentResult.sentiment || 'neutral';
+            const feedbackResponse = sentiment === 'positive'
+              ? (language === 'ar' ? '😊 شكراً على ملاحظاتك الإيجابية! سعيد أنني ساعدتك' : '😊 Thanks for the positive feedback! Happy I could help')
+              : sentiment === 'negative'
+              ? (language === 'ar' ? '😔 عذراً إذا لم تكن النتائج كما توقعت. جرب تعديل معايير البحث' : '😔 Sorry the results weren\'t what you expected. Try adjusting your search criteria')
+              : (language === 'ar' ? 'شكراً على ملاحظاتك!' : 'Thanks for your feedback!');
+            await ctx.reply(feedbackResponse);
+            return;
 
-        case intentClassifier.intentTypes.COMPARISON:
-          const comparisonMessage = language === 'ar'
-            ? '⚖️ *مقارنة المنتجات*\n\nلمقارنة منتجات مختلفة:\n\n1️⃣ ابحث عن المنتج الأول\n2️⃣ ثم ابحث عن المنتج الثاني\n3️⃣ قارن بين المواصفات والأسعار\n\n💡 *مثال:*\n"سيارة تويوتا"\nثم "سيارة هونداي"\n\nجرب البحث الآن!'
-            : '⚖️ *Product Comparison*\n\nTo compare different products:\n\n1️⃣ Search for the first product\n2️⃣ Then search for the second product\n3️⃣ Compare specs and prices\n\n💡 *Example:*\n"Toyota car"\nthen "Hyundai car"\n\nTry searching now!';
-          await ctx.reply(comparisonMessage, { parse_mode: 'Markdown' });
-          return;
+          case intentClassifier.intentTypes.COMPLAINT:
+            const complaintMessage = language === 'ar'
+              ? '😔 *نأسف لوجود مشكلة*\n\nنحن نعمل باستمرار على تحسين الخدمة. يمكنك:\n\n• 🔄 إعادة المحاولة بصيغة مختلفة\n• 📝 وصف المشكلة بالتفصيل\n• 📞 التواصل مع الدعم الفني\n\nكيف يمكنني مساعدتك؟'
+              : '😔 *Sorry to hear about the issue*\n\nWe\'re constantly working to improve our service. You can:\n\n• 🔄 Try again with different wording\n• 📝 Describe the problem in detail\n• 📞 Contact technical support\n\nHow can I help you?';
+            await ctx.reply(complaintMessage, { parse_mode: 'Markdown' });
+            return;
 
-        case intentClassifier.intentTypes.AVAILABILITY:
-          const availabilityMessage = language === 'ar'
-            ? '🔍 *التحقق من التوفر*\n\nلمعرفة إذا كان منتج معين متوفراً:\n\nابحث عن المنتج مع تحديد المدينة والمواصفات.\n\n💡 *مثال:*\n• "موبايل ايفون 13 في دمشق"\n• "شقة 3 غرف في حلب"\n\nما الذي تبحث عنه؟'
-            : '🔍 *Check Availability*\n\nTo check if a specific product is available:\n\nSearch for the product with location and specs.\n\n💡 *Example:*\n• "iPhone 13 in Damascus"\n• "3 bedroom apartment in Aleppo"\n\nWhat are you looking for?';
-          await ctx.reply(availabilityMessage, { parse_mode: 'Markdown' });
-          return;
+          case intentClassifier.intentTypes.CONTACT:
+            const contactMessage = language === 'ar'
+              ? '📞 *معلومات التواصل*\n\nللتواصل مع فريق الدعم:\n\n• 💬 يمكنك التواصل مباشرة من خلال هذا البوت\n• 📧 البريد: support@kasioon.com\n• 🌐 الموقع: www.kasioon.com\n\nأو يمكنني مساعدتك مباشرة. ما الذي تحتاجه؟'
+              : '📞 *Contact Information*\n\nTo contact our support team:\n\n• 💬 You can reach out directly through this bot\n• 📧 Email: support@kasioon.com\n• 🌐 Website: www.kasioon.com\n\nOr I can help you directly. What do you need?';
+            await ctx.reply(contactMessage, { parse_mode: 'Markdown' });
+            return;
 
-        case intentClassifier.intentTypes.UNCLEAR:
-          // Send clarification question
-          const clarificationMsg = intentResult.clarificationQuestion ||
-            responseFormatter.getNoResultsMessage(language);
-          await ctx.reply(clarificationMsg, { parse_mode: 'Markdown' });
-          return;
+          case intentClassifier.intentTypes.UNCLEAR:
+            // Send clarification question
+            const clarificationMsg = intentResult.clarificationQuestion ||
+              responseFormatter.getNoResultsMessage(language);
+            await ctx.reply(clarificationMsg, { parse_mode: 'Markdown' });
+            return;
 
-        case intentClassifier.intentTypes.SEARCH:
-          // Continue with search flow (existing code)
-          break;
+          case intentClassifier.intentTypes.SEARCH:
+          case intentClassifier.intentTypes.PRODUCT_INFO:
+          case intentClassifier.intentTypes.COMPARISON:
+          case intentClassifier.intentTypes.AVAILABILITY:
+            // Continue with search flow
+            break;
 
-        default:
-          // Unknown intent, try to search anyway
-          logger.warn(`[INTENT] Unknown intent type: ${intentResult.intent}`);
-          break;
+          default:
+            // Unknown intent, try to search anyway
+            logger.warn(`[INTENT] Unknown intent type: ${intentResult.intent}`);
+            break;
+        }
       }
 
-      // SEARCH FLOW (only reached if intent is SEARCH or unknown)
+      // SEARCH FLOW (MCP mode always reaches here, Legacy mode only if SEARCH/AVAILABILITY intent)
 
       // Check DB cache for popular searches first (skip in MCP mode for real-time data)
       if (!USE_MCP_AGENT) {
@@ -483,8 +478,8 @@ Send a voice message and I'll understand
         category: extractedParams.category,
         city: extractedParams.city,
         language,
-        intent: intentResult.intent,
-        intentConfidence: intentResult.confidence,
+        intent: USE_MCP_AGENT ? 'mcp_agent' : 'search',
+        intentConfidence: USE_MCP_AGENT ? 1.0 : 0.8,
         mode: USE_MCP_AGENT ? 'mcp' : 'legacy'
       });
 

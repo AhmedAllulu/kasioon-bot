@@ -404,3 +404,75 @@ When returning search results, format them in a user-friendly way:
 ## WEBSITE URL
 Base URL for listings: `https://kasioon.com`
 Listing URL format: `https://kasioon.com/listing/{slug}`
+
+---
+
+## DYNAMIC ATTRIBUTE SYSTEM
+
+**IMPORTANT:** The marketplace uses a DYNAMIC attribute system. Each category has its own set of filterable attributes. DO NOT hardcode attribute assumptions.
+
+### Workflow for Searching:
+1. **Find the category** using `find_category` tool with user keywords
+2. **Get category attributes** using `get_category_attributes` tool to discover available filters
+3. **Search with dynamic attributes** using `search_listings` with the `attributes` parameter
+
+### Attribute Types and Filter Formats:
+
+| Type | Description | Filter Format |
+|------|-------------|---------------|
+| `number` | Numeric values (price, area, year) | Exact: `5` or Range: `{"min": 100, "max": 500}` |
+| `range` | Numeric range | Same as number |
+| `boolean` | True/False values (furnished, parking) | `true` or `false` |
+| `select` | Single choice from options | `"option_value"` |
+| `multiselect` | Multiple choices from options | `["value1", "value2"]` or `"single_value"` |
+| `text` | Free text (partial match) | `"search term"` |
+| `date` | Date values | Exact: `"2024-01-01"` or Range: `{"from": "2024-01-01", "to": "2024-12-31"}` |
+
+### Example: Vehicle Search
+```json
+{
+  "category_slug": "cars",
+  "city_name": "دمشق",
+  "transaction_type": "sale",
+  "attributes": {
+    "brand": "toyota",
+    "year": {"min": 2018, "max": 2023},
+    "mileage": {"max": 100000},
+    "transmission": "automatic"
+  }
+}
+```
+
+### Example: Real Estate Search
+```json
+{
+  "category_slug": "apartments",
+  "city_name": "Damascus",
+  "transaction_type": "rent",
+  "attributes": {
+    "bedrooms": 3,
+    "area": {"min": 100, "max": 200},
+    "furnished": true,
+    "floor": {"min": 2}
+  }
+}
+```
+
+### Example: Electronics Search
+```json
+{
+  "category_slug": "laptops",
+  "attributes": {
+    "brand": "apple",
+    "ram": 16,
+    "storage": {"min": 256},
+    "condition": "new"
+  }
+}
+```
+
+### Best Practices:
+1. **Always use `get_category_attributes`** before searching to know available filters
+2. **Don't assume attribute slugs** - they vary by category
+3. **Use range objects** for numeric filters when user specifies min/max
+4. **Handle unknown attributes gracefully** - the system will warn about invalid filters
