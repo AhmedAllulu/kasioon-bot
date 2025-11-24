@@ -194,22 +194,26 @@ Common attribute slugs by category:
         }
       },
       {
-        name: 'get_categories',
-        description: 'Get available categories. Use this to understand the category hierarchy and find LEAF categories.',
+        name: 'get_root_categories',
+        description: 'Get main categories (level 0). This is the first step in progressive category navigation.',
+        input_schema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      },
+      {
+        name: 'get_child_categories',
+        description: 'Get children of a category. Use this to drill down the category hierarchy until reaching a leaf category.',
         input_schema: {
           type: 'object',
           properties: {
-            parent_slug: {
+            parent_id: {
               type: 'string',
-              description: 'Optional parent category slug to get subcategories'
-            },
-            only_leaf: {
-              type: 'boolean',
-              description: 'If true, only return LEAF categories (categories with no children)',
-              default: false
+              description: 'Parent category ID (UUID)'
             }
           },
-          required: []
+          required: ['parent_id']
         }
       },
       {
@@ -362,8 +366,10 @@ Common attribute slugs by category:
         return this.searchListings(toolInput);
       case 'get_category_attributes':
         return this.getCategoryAttributesBySlug(toolInput.category_slug);
-      case 'get_categories':
-        return this.getCategories(toolInput);
+      case 'get_root_categories':
+        return this.getRootCategories();
+      case 'get_child_categories':
+        return this.getChildCategories(toolInput.parent_id);
       case 'get_cities':
         return this.getCities(toolInput);
       case 'get_listing_details':
@@ -376,7 +382,7 @@ Common attribute slugs by category:
   }
 
   /**
-   * Search listings with FULLY DYNAMIC attribute support
+   * Search listings - Optimized for minimal token usage
    * @param {Object} params - Search parameters
    * @returns {Promise<Object>} Search results
    */
@@ -394,159 +400,104 @@ Common attribute slugs by category:
       city_name,
       transaction_type,
       attributeCount: Object.keys(attributes).length,
-      attributes,
       limit
     });
 
     try {
-      // 1. Get category ID and verify it's a LEAF category
+      // 1. Get category and verify it's a LEAF category
       const categoryQuery = `
-        SELECT
-          c.id,
-          c.slug,
-          c.name_ar,
-          c.name_en,
-          NOT EXISTS (
-            SELECT 1 FROM categories child
-            WHERE child.parent_id = c.id AND child.is_active = true
-          ) as is_leaf
+        SELECT id, name_ar, slug
         FROM categories c
         WHERE c.slug = $1 AND c.is_active = true
       `;
-
       const categoryResult = await this.pool.query(categoryQuery, [category_slug]);
 
       if (categoryResult.rows.length === 0) {
         return {
           listings: [],
           count: 0,
-          message: `Category "${category_slug}" not found. Please use find_category to discover valid categories.`
+          message: `الفئة "${category_slug}" غير موجودة`
         };
       }
 
       const category = categoryResult.rows[0];
 
-      if (!category.is_leaf) {
-        // Get subcategories for suggestion
-        const subQuery = `
-          SELECT slug, name_ar FROM categories
-          WHERE parent_id = $1 AND is_active = true
-          ORDER BY sort_order LIMIT 5
-        `;
-        const subResult = await this.pool.query(subQuery, [category.id]);
-        const suggestions = subResult.rows.map(r => r.slug).join(', ');
-
-        return {
-          listings: [],
-          count: 0,
-          message: `Category "${category_slug}" is not a leaf category. Please select a more specific subcategory. Suggestions: ${suggestions}`
-        };
-      }
-
-      // 2. Fetch category attributes for validation and query building
-      const categoryAttributes = await this.getCategoryAttributes(category.id);
-      const attributeMap = new Map(categoryAttributes.map(a => [a.slug, a]));
-
-      // 3. Build SELECT clause with base fields
+      // 2. Build simple query - NO attribute subqueries
       let query = `
         SELECT
-          l.id,
-          l.title,
-          l.description,
-          l.slug,
-          l.images,
-          l.created_at,
-          l.views_count,
-          l.is_boosted,
-          c.name_ar as category_name,
-          c.name_en as category_name_en,
-          c.slug as category_slug,
-          ct.name_ar as city_name,
-          ct.name_en as city_name_en,
-          ct.province_ar as province,
+          l.id, l.title, l.slug,
+          c.name_ar as category,
+          ct.name_ar as city,
           tt.name_ar as transaction_type,
-          tt.slug as transaction_slug
-      `;
-
-      // 4. Add attribute subqueries for SELECT (to include values in results)
-      query += this.buildAttributeSubqueries(categoryAttributes);
-
-      // 5. FROM and JOIN clauses
-      query += `
+          l.images
         FROM listings l
         JOIN categories c ON l.category_id = c.id
         LEFT JOIN cities ct ON l.city_id = ct.id
         LEFT JOIN transaction_types tt ON l.transaction_type_id = tt.id
         WHERE l.status = 'active'
-          AND c.id = $1
+          AND l.category_id = $1
       `;
 
       const queryParams = [category.id];
       let paramIndex = 2;
 
-      // 6. City filter
+      // 3. City filter
       if (city_name) {
-        query += ` AND (ct.name_ar ILIKE $${paramIndex} OR ct.name_en ILIKE $${paramIndex})`;
+        query += ` AND ct.name_ar ILIKE $${paramIndex}`;
         queryParams.push(`%${city_name}%`);
         paramIndex++;
       }
 
-      // 7. Transaction type filter
+      // 4. Transaction filter
       if (transaction_type) {
         query += ` AND tt.slug = $${paramIndex}`;
         queryParams.push(transaction_type);
         paramIndex++;
       }
 
-      // 8. DYNAMIC ATTRIBUTE FILTERS
-      const unknownAttributes = [];
+      // 5. Attribute filters - only for critical attributes
+      const criticalAttrs = ['price', 'area', 'rooms', 'bedrooms'];
       for (const [attrSlug, attrValue] of Object.entries(attributes)) {
-        const attrMeta = attributeMap.get(attrSlug);
+        if (!criticalAttrs.includes(attrSlug)) continue;
 
-        if (!attrMeta) {
-          unknownAttributes.push(attrSlug);
-          console.warn(`⚠️ [MCP-AGENT] Attribute "${attrSlug}" not found for category "${category_slug}"`);
-          continue;
-        }
-
-        // Build filter based on attribute type
-        const filterResult = this.buildAttributeFilter(attrMeta, attrValue, queryParams, paramIndex);
-        if (filterResult) {
-          query += filterResult.query;
-          paramIndex += filterResult.paramsAdded;
-        }
+        // Simple EXISTS check instead of complex subquery
+        query += ` AND EXISTS (
+          SELECT 1 FROM listing_attribute_values lav
+          JOIN listing_attributes la ON lav.attribute_id = la.id
+          WHERE lav.listing_id = l.id
+            AND la.slug = '${attrSlug}'
+            AND lav.value_number >= $${paramIndex}
+        )`;
+        queryParams.push(attrValue);
+        paramIndex++;
       }
 
-      // 9. Order and limit
+      // 6. Order and limit
       query += ` ORDER BY l.is_boosted DESC, l.created_at DESC LIMIT $${paramIndex}`;
       queryParams.push(Math.min(limit, 20));
 
-      console.log('📊 [MCP-AGENT] Executing query with', queryParams.length, 'parameters');
-
-      // 10. Execute query
-      const startTime = Date.now();
+      // 7. Execute query
       const result = await this.pool.query(query, queryParams);
-      const queryTime = Date.now() - startTime;
 
-      console.log(`✅ [MCP-AGENT] Query executed in ${queryTime}ms, found ${result.rows.length} listings`);
+      console.log(`✅ [MCP-AGENT] Found ${result.rows.length} listings`);
 
-      // 11. Format results with all dynamic attributes
-      const listings = result.rows.map(row => this.formatListing(row, categoryAttributes));
+      // 8. Simple formatting
+      const listings = result.rows.map(row => ({
+        id: row.id,
+        title: row.title,
+        slug: row.slug,
+        category: row.category,
+        city: row.city,
+        transaction_type: row.transaction_type,
+        images: this.parseImages(row.images),
+        listing_url: `${this.websiteUrl}/listing/${row.slug || row.id}`
+      }));
 
-      const response = {
+      return {
         listings,
         count: listings.length,
-        category: category.name_ar,
-        category_en: category.name_en,
-        query_time_ms: queryTime
+        category: category.name_ar
       };
-
-      // Add warnings for unknown attributes
-      if (unknownAttributes.length > 0) {
-        response.warnings = [`Unknown attributes for this category: ${unknownAttributes.join(', ')}. Use get_category_attributes to see available attributes.`];
-      }
-
-      return response;
 
     } catch (error) {
       console.error('❌ [MCP-AGENT] Search error:', error);
@@ -554,256 +505,6 @@ Common attribute slugs by category:
     }
   }
 
-  /**
-   * Build SELECT subqueries for all category attributes
-   * @param {Array} categoryAttributes - Array of attribute metadata
-   * @returns {String} SQL subqueries string
-   */
-  buildAttributeSubqueries(categoryAttributes) {
-    return categoryAttributes.map(attr => {
-      const valueColumn = this.getValueColumnForType(attr.type);
-      return `
-        ,(SELECT lav.${valueColumn}
-          FROM listing_attribute_values lav
-          WHERE lav.listing_id = l.id AND lav.attribute_id = '${attr.id}'
-        ) as "${attr.slug}"`;
-    }).join('');
-  }
-
-  /**
-   * Get appropriate value column based on attribute type
-   * @param {String} type - Attribute type
-   * @returns {String} Column name
-   */
-  getValueColumnForType(type) {
-    switch (type) {
-      case 'number':
-      case 'range':
-        return 'value_number';
-      case 'boolean':
-        return 'value_boolean';
-      case 'date':
-        return 'value_date';
-      case 'select':
-      case 'multiselect':
-        return 'value_json';
-      case 'text':
-      default:
-        return 'value_text';
-    }
-  }
-
-  /**
-   * Build WHERE clause for a specific attribute
-   * @param {Object} attrMeta - Attribute metadata from database
-   * @param {*} attrValue - Filter value from user
-   * @param {Array} queryParams - Query parameters array (mutated)
-   * @param {Number} startIndex - Starting parameter index
-   * @returns {Object|null} { query: string, paramsAdded: number }
-   */
-  buildAttributeFilter(attrMeta, attrValue, queryParams, startIndex) {
-    const { id, slug, type } = attrMeta;
-    let filterQuery = '';
-    let paramsAdded = 0;
-
-    // Skip null/undefined values
-    if (attrValue === null || attrValue === undefined) {
-      return null;
-    }
-
-    switch (type) {
-      case 'number':
-      case 'range':
-        if (typeof attrValue === 'object' && (attrValue.min !== undefined || attrValue.max !== undefined)) {
-          // Range query
-          if (attrValue.min !== undefined) {
-            filterQuery += ` AND EXISTS (
-              SELECT 1 FROM listing_attribute_values lav
-              WHERE lav.listing_id = l.id
-                AND lav.attribute_id = '${id}'
-                AND lav.value_number >= $${startIndex + paramsAdded}
-            )`;
-            queryParams.push(attrValue.min);
-            paramsAdded++;
-          }
-          if (attrValue.max !== undefined) {
-            filterQuery += ` AND EXISTS (
-              SELECT 1 FROM listing_attribute_values lav
-              WHERE lav.listing_id = l.id
-                AND lav.attribute_id = '${id}'
-                AND lav.value_number <= $${startIndex + paramsAdded}
-            )`;
-            queryParams.push(attrValue.max);
-            paramsAdded++;
-          }
-        } else {
-          // Exact match for number
-          filterQuery += ` AND EXISTS (
-            SELECT 1 FROM listing_attribute_values lav
-            WHERE lav.listing_id = l.id
-              AND lav.attribute_id = '${id}'
-              AND lav.value_number = $${startIndex + paramsAdded}
-          )`;
-          queryParams.push(attrValue);
-          paramsAdded++;
-        }
-        break;
-
-      case 'boolean':
-        filterQuery += ` AND EXISTS (
-          SELECT 1 FROM listing_attribute_values lav
-          WHERE lav.listing_id = l.id
-            AND lav.attribute_id = '${id}'
-            AND lav.value_boolean = $${startIndex + paramsAdded}
-        )`;
-        queryParams.push(attrValue);
-        paramsAdded++;
-        break;
-
-      case 'select':
-        // Single select - check if value matches
-        filterQuery += ` AND EXISTS (
-          SELECT 1 FROM listing_attribute_values lav
-          WHERE lav.listing_id = l.id
-            AND lav.attribute_id = '${id}'
-            AND (
-              lav.value_json @> $${startIndex + paramsAdded}::jsonb
-              OR lav.value_text = $${startIndex + paramsAdded + 1}
-            )
-        )`;
-        queryParams.push(JSON.stringify([attrValue]));
-        queryParams.push(attrValue);
-        paramsAdded += 2;
-        break;
-
-      case 'multiselect':
-        // Multiselect - check if array contains value
-        if (Array.isArray(attrValue)) {
-          filterQuery += ` AND EXISTS (
-            SELECT 1 FROM listing_attribute_values lav
-            WHERE lav.listing_id = l.id
-              AND lav.attribute_id = '${id}'
-              AND lav.value_json ?| $${startIndex + paramsAdded}
-          )`;
-          queryParams.push(attrValue);
-          paramsAdded++;
-        } else {
-          filterQuery += ` AND EXISTS (
-            SELECT 1 FROM listing_attribute_values lav
-            WHERE lav.listing_id = l.id
-              AND lav.attribute_id = '${id}'
-              AND lav.value_json @> $${startIndex + paramsAdded}::jsonb
-          )`;
-          queryParams.push(JSON.stringify([attrValue]));
-          paramsAdded++;
-        }
-        break;
-
-      case 'text':
-        filterQuery += ` AND EXISTS (
-          SELECT 1 FROM listing_attribute_values lav
-          WHERE lav.listing_id = l.id
-            AND lav.attribute_id = '${id}'
-            AND lav.value_text ILIKE $${startIndex + paramsAdded}
-        )`;
-        queryParams.push(`%${attrValue}%`);
-        paramsAdded++;
-        break;
-
-      case 'date':
-        if (typeof attrValue === 'object' && (attrValue.from || attrValue.to)) {
-          if (attrValue.from) {
-            filterQuery += ` AND EXISTS (
-              SELECT 1 FROM listing_attribute_values lav
-              WHERE lav.listing_id = l.id
-                AND lav.attribute_id = '${id}'
-                AND lav.value_date >= $${startIndex + paramsAdded}
-            )`;
-            queryParams.push(attrValue.from);
-            paramsAdded++;
-          }
-          if (attrValue.to) {
-            filterQuery += ` AND EXISTS (
-              SELECT 1 FROM listing_attribute_values lav
-              WHERE lav.listing_id = l.id
-                AND lav.attribute_id = '${id}'
-                AND lav.value_date <= $${startIndex + paramsAdded}
-            )`;
-            queryParams.push(attrValue.to);
-            paramsAdded++;
-          }
-        } else {
-          // Exact date match
-          filterQuery += ` AND EXISTS (
-            SELECT 1 FROM listing_attribute_values lav
-            WHERE lav.listing_id = l.id
-              AND lav.attribute_id = '${id}'
-              AND lav.value_date = $${startIndex + paramsAdded}
-          )`;
-          queryParams.push(attrValue);
-          paramsAdded++;
-        }
-        break;
-
-      default:
-        console.warn(`⚠️ [MCP-AGENT] Unknown attribute type: ${type} for attribute ${slug}`);
-        return null;
-    }
-
-    return { query: filterQuery, paramsAdded };
-  }
-
-  /**
-   * Format listing with all dynamic attributes
-   * @param {Object} row - Database row
-   * @param {Array} categoryAttributes - Category attribute metadata
-   * @returns {Object} Formatted listing
-   */
-  formatListing(row, categoryAttributes = []) {
-    // Extract dynamic attributes
-    const attributes = {};
-    const attributeDetails = [];
-
-    for (const attr of categoryAttributes) {
-      const value = row[attr.slug];
-      if (value !== null && value !== undefined) {
-        attributes[attr.slug] = value;
-        attributeDetails.push({
-          slug: attr.slug,
-          name_ar: attr.name_ar,
-          name_en: attr.name_en,
-          value: value,
-          unit_ar: attr.unit_ar,
-          unit_en: attr.unit_en,
-          type: attr.type
-        });
-      }
-    }
-
-    return {
-      id: row.id,
-      title: row.title,
-      description: row.description ? row.description.substring(0, 200) + '...' : null,
-      slug: row.slug,
-      category_name: row.category_name,
-      category_name_en: row.category_name_en,
-      category_slug: row.category_slug,
-      city_name: row.city_name,
-      city_name_en: row.city_name_en,
-      province: row.province,
-      transaction_type: row.transaction_type,
-      transaction_slug: row.transaction_slug,
-      images: this.parseImages(row.images),
-      is_boosted: row.is_boosted,
-      views_count: row.views_count,
-      created_at: row.created_at,
-      // Dynamic attributes as flat object
-      attributes,
-      // Detailed attribute info with names and units
-      attribute_details: attributeDetails,
-      listing_url: `${this.websiteUrl}/listing/${row.slug || row.id}`
-    };
-  }
 
   /**
    * Parse images field
@@ -821,81 +522,77 @@ Common attribute slugs by category:
   }
 
   /**
-   * Get categories from database
+   * Get root categories (level 0) - Progressive navigation step 1
    */
-  async getCategories(params) {
-    const { parent_slug, only_leaf = false } = params;
-
-    let query;
-    const queryParams = [];
-
-    if (only_leaf) {
-      query = `
-        SELECT c.id, c.name_ar, c.name_en, c.slug, c.level, c.icon,
-               p.slug as parent_slug, p.name_ar as parent_name
-        FROM categories c
-        LEFT JOIN categories p ON c.parent_id = p.id
-        WHERE c.is_active = true
-          AND NOT EXISTS (
-            SELECT 1 FROM categories child
-            WHERE child.parent_id = c.id AND child.is_active = true
-          )
-        ORDER BY c.level, c.sort_order
-      `;
-    } else if (parent_slug) {
-      query = `
-        SELECT c.id, c.name_ar, c.name_en, c.slug, c.level, c.icon,
-               NOT EXISTS (
-                 SELECT 1 FROM categories child
-                 WHERE child.parent_id = c.id AND child.is_active = true
-               ) as is_leaf
-        FROM categories c
-        JOIN categories p ON c.parent_id = p.id
-        WHERE c.is_active = true AND p.slug = $1
-        ORDER BY c.sort_order
-      `;
-      queryParams.push(parent_slug);
-    } else {
-      query = `
-        SELECT c.id, c.name_ar, c.name_en, c.slug, c.level, c.icon,
-               EXISTS (
-                 SELECT 1 FROM categories child
-                 WHERE child.parent_id = c.id AND child.is_active = true
-               ) as has_children
-        FROM categories c
-        WHERE c.is_active = true AND c.parent_id IS NULL
-        ORDER BY c.sort_order
-      `;
-    }
+  async getRootCategories() {
+    const query = `
+      SELECT id, name_ar, slug
+      FROM categories
+      WHERE parent_id IS NULL AND is_active = true
+      ORDER BY sort_order ASC
+    `;
 
     try {
-      const result = await this.pool.query(query, queryParams);
-      console.log(`✅ [MCP-AGENT] Found ${result.rows.length} categories`);
-      return { categories: result.rows };
+      const result = await this.pool.query(query);
+      console.log(`✅ [MCP-AGENT] Found ${result.rows.length} root categories`);
+      return {
+        categories: result.rows,
+        message: 'اختر فئة رئيسية'
+      };
     } catch (error) {
-      console.error('❌ [MCP-AGENT] Categories query error:', error.message);
+      console.error('❌ [MCP-AGENT] Root categories query error:', error.message);
       throw error;
     }
   }
 
   /**
-   * Get cities from database
+   * Get child categories for a parent - Progressive navigation step 2+
+   */
+  async getChildCategories(parentId) {
+    const query = `
+      SELECT
+        id, name_ar, slug,
+        NOT EXISTS(
+          SELECT 1 FROM categories
+          WHERE parent_id = c.id AND is_active = true
+        ) as is_leaf
+      FROM categories c
+      WHERE parent_id = $1 AND is_active = true
+      ORDER BY sort_order ASC
+      LIMIT 50
+    `;
+
+    try {
+      const result = await this.pool.query(query, [parentId]);
+      console.log(`✅ [MCP-AGENT] Found ${result.rows.length} child categories for parent ${parentId}`);
+      return {
+        categories: result.rows,
+        parent_id: parentId
+      };
+    } catch (error) {
+      console.error('❌ [MCP-AGENT] Child categories query error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get cities from database - Optimized for Arabic users
    */
   async getCities(params) {
     const { search } = params;
 
     let query = `
-      SELECT id, name_ar, name_en, province_ar, province_en
+      SELECT id, name_ar, province_ar
       FROM cities
     `;
     const queryParams = [];
 
     if (search) {
-      query += ` WHERE name_ar ILIKE $1 OR name_en ILIKE $1 OR province_ar ILIKE $1`;
+      query += ` WHERE name_ar ILIKE $1 OR province_ar ILIKE $1`;
       queryParams.push(`%${search}%`);
     }
 
-    query += ` ORDER BY name_ar`;
+    query += ` ORDER BY name_ar LIMIT 30`;
 
     try {
       const result = await this.pool.query(query, queryParams);
@@ -908,7 +605,7 @@ Common attribute slugs by category:
   }
 
   /**
-   * Get listing details with ALL dynamic attributes
+   * Get listing details - Optimized for Arabic users
    */
   async getListingDetails(params) {
     const { listing_id, slug } = params;
@@ -919,16 +616,10 @@ Common attribute slugs by category:
 
     let query = `
       SELECT
-        l.*,
-        c.id as category_id,
-        c.name_ar as category_name,
-        c.name_en as category_name_en,
-        c.slug as category_slug,
-        ct.name_ar as city_name,
-        ct.name_en as city_name_en,
-        ct.province_ar as province,
-        tt.name_ar as transaction_type,
-        tt.slug as transaction_slug
+        l.id, l.title, l.slug, l.images,
+        c.name_ar as category, c.slug as category_slug,
+        ct.name_ar as city, ct.province_ar as province,
+        tt.name_ar as transaction_type
       FROM listings l
       JOIN categories c ON l.category_id = c.id
       LEFT JOIN cities ct ON l.city_id = ct.id
@@ -949,48 +640,32 @@ Common attribute slugs by category:
       const listingResult = await this.pool.query(query, queryParams);
 
       if (listingResult.rows.length === 0) {
-        return { listing: null, message: 'Listing not found' };
+        return { listing: null, message: 'الإعلان غير موجود' };
       }
 
       const listing = listingResult.rows[0];
 
-      // Get all attributes for this listing with full metadata
+      // Get only important attributes - limit to 8
       const attrsQuery = `
-        SELECT
-          la.slug,
-          la.name_ar,
-          la.name_en,
-          la.type,
-          lav.value_text,
-          lav.value_number,
-          lav.value_boolean,
-          lav.value_date,
-          lav.value_json,
-          lav.unit_ar,
-          lav.unit_en,
-          la.unit_ar as attr_unit_ar,
-          la.unit_en as attr_unit_en
+        SELECT la.name_ar, lav.value_text, lav.value_number
         FROM listing_attribute_values lav
         JOIN listing_attributes la ON lav.attribute_id = la.id
         WHERE lav.listing_id = $1
+          AND la.slug IN ('price', 'area', 'rooms', 'bathrooms', 'bedrooms', 'year', 'brand', 'model')
         ORDER BY la.sort_order
+        LIMIT 8
       `;
 
       const attrsResult = await this.pool.query(attrsQuery, [listing.id]);
 
-      // Format attributes with proper value extraction
-      listing.attributes = attrsResult.rows.map(attr => ({
-        slug: attr.slug,
-        name_ar: attr.name_ar,
-        name_en: attr.name_en,
-        type: attr.type,
-        value: this.extractAttributeValue(attr),
-        unit_ar: attr.unit_ar || attr.attr_unit_ar,
-        unit_en: attr.unit_en || attr.attr_unit_en
-      }));
+      // Format as simple key-value object
+      listing.attributes = {};
+      attrsResult.rows.forEach(attr => {
+        listing.attributes[attr.name_ar] = attr.value_number || attr.value_text;
+      });
 
-      listing.listing_url = `${this.websiteUrl}/listing/${listing.slug || listing.id}`;
       listing.images = this.parseImages(listing.images);
+      listing.listing_url = `${this.websiteUrl}/listing/${listing.slug || listing.id}`;
 
       console.log(`✅ [MCP-AGENT] Found listing details with ${attrsResult.rows.length} attributes`);
       return { listing };
@@ -1001,26 +676,6 @@ Common attribute slugs by category:
     }
   }
 
-  /**
-   * Extract proper value based on attribute type
-   */
-  extractAttributeValue(attr) {
-    switch (attr.type) {
-      case 'number':
-      case 'range':
-        return attr.value_number;
-      case 'boolean':
-        return attr.value_boolean;
-      case 'date':
-        return attr.value_date;
-      case 'select':
-      case 'multiselect':
-        return attr.value_json;
-      case 'text':
-      default:
-        return attr.value_text;
-    }
-  }
 
   /**
    * Find matching LEAF category based on keywords
