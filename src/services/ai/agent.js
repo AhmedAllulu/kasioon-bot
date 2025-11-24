@@ -399,11 +399,14 @@ Response:
         console.log('Raw Response:', content);
         console.log('Response Length:', content.length);
         console.log('='.repeat(80) + '\n');
-        
+
+        const tokenStats = this.logTokenUsage(`anthropic:${model}`, response.usage);
+
         extractedParams = JSON.parse(content);
 
         // Track usage
-        modelManager.trackUsage(taskType, response.usage?.output_tokens || maxTokens, model);
+        const tokensForTracking = tokenStats.totalTokens ?? tokenStats.completionTokens ?? maxTokens;
+        modelManager.trackUsage(taskType, tokensForTracking, model);
 
       } else if (this.openai) {
         const model = modelManager.getModel(taskType, 'openai');
@@ -463,11 +466,14 @@ Response:
           console.log('Response Length:', rawContent.length);
           console.log('Usage:', JSON.stringify(response.usage, null, 2));
           console.log('='.repeat(80) + '\n');
-          
+
+          const tokenStats = this.logTokenUsage(`openai:${model}`, response.usage);
+
           extractedParams = JSON.parse(rawContent);
 
           // Track usage
-          modelManager.trackUsage(taskType, response.usage?.total_tokens || 500, model);
+          const tokensForTracking = tokenStats.totalTokens ?? 500;
+          modelManager.trackUsage(taskType, tokensForTracking, model);
         } catch (modelError) {
           // Check if it's a temperature error - retry without temperature
           if (modelError.message && modelError.message.includes('temperature') && 
@@ -487,7 +493,10 @@ Response:
               console.log('✅ [AI-ANALYZE] Retry without temperature succeeded!');
               const rawContent = response.choices[0].message.content;
               console.log('📄 [AI-ANALYZE] Raw response:', rawContent);
+              const retryTokenStats = this.logTokenUsage(`openai:${this.openaiModel}`, response.usage);
               extractedParams = JSON.parse(rawContent);
+              const retryTokensForTracking = retryTokenStats.totalTokens ?? 500;
+              modelManager.trackUsage(taskType, retryTokensForTracking, this.openaiModel);
             } catch (retryError) {
               console.error('❌ [AI-ANALYZE] Retry also failed:', retryError.message);
               throw modelError; // Throw original error
@@ -523,7 +532,10 @@ Response:
                 
                 console.log(`✅ [AI-ANALYZE] Fallback model ${fallbackModel} worked!`);
                 const rawContent = response.choices[0].message.content;
+                const fallbackTokenStats = this.logTokenUsage(`openai:${fallbackModel}`, response.usage);
                 extractedParams = JSON.parse(rawContent);
+                const fallbackTokensForTracking = fallbackTokenStats.totalTokens ?? 500;
+                modelManager.trackUsage(taskType, fallbackTokensForTracking, fallbackModel);
                 break; // Success, exit loop
               } catch (fallbackError) {
                 console.warn(`❌ [AI-ANALYZE] Fallback model ${fallbackModel} also failed:`, fallbackError.message);
@@ -1394,6 +1406,52 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
       hash = hash & hash; // Convert to 32bit integer
     }
     return hash.toString(16);
+  }
+
+  /**
+   * Normalize token usage stats from different providers
+   * @param {Object} usage - Raw usage object from provider response
+   * @returns {{promptTokens: (number|null), completionTokens: (number|null), totalTokens: (number|null)}}
+   */
+  extractTokenStats(usage = {}) {
+    if (!usage) {
+      return {
+        promptTokens: null,
+        completionTokens: null,
+        totalTokens: null
+      };
+    }
+
+    const promptTokens = usage.prompt_tokens ?? usage.input_tokens ?? null;
+    const completionTokens = usage.completion_tokens ?? usage.output_tokens ?? null;
+
+    let totalTokens = usage.total_tokens ?? null;
+    if (totalTokens == null && (promptTokens != null || completionTokens != null)) {
+      totalTokens = (promptTokens || 0) + (completionTokens || 0);
+    }
+
+    return {
+      promptTokens,
+      completionTokens,
+      totalTokens
+    };
+  }
+
+  /**
+   * Log token usage in debug output
+   * @param {string} provider - Provider/model identifier
+   * @param {Object} usage - Raw usage object from provider response
+   * @returns {{promptTokens: (number|null), completionTokens: (number|null), totalTokens: (number|null)}}
+   */
+  logTokenUsage(provider, usage = {}) {
+    const stats = this.extractTokenStats(usage);
+    console.log('🧮 [AI-ANALYZE] Token usage stats:', {
+      provider,
+      promptTokens: stats.promptTokens ?? 'unknown',
+      completionTokens: stats.completionTokens ?? 'unknown',
+      totalTokens: stats.totalTokens ?? 'unknown'
+    });
+    return stats;
   }
 
   /**
