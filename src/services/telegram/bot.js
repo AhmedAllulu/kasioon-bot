@@ -249,7 +249,7 @@ Send a voice message and I'll understand
       const userContext = contextManager.getContext(userId);
 
       // Detect language (prefer context language if available)
-      const language = userContext.preferredLanguage || this.detectLanguage(userMessage);
+      const language = userContext.preferredLanguage || detectLanguage(userMessage);
 
       logger.info(`[TELEGRAM] Processing message from user ${userId}:`, userMessage);
 
@@ -442,7 +442,7 @@ Send a voice message and I'll understand
 
     } catch (error) {
       logger.error('[TELEGRAM] Error handling text message:', error);
-      const language = this.detectLanguage(userMessage);
+      const language = detectLanguage(userMessage);
       await ctx.reply(responseFormatter.formatError('search_error', language));
     }
   }

@@ -8,7 +8,31 @@ const logger = require('../../utils/logger');
  */
 class DynamicDataManager {
   constructor() {
-    this.apiUrl = process.env.KASIOON_API_URL;
+    // Get base URL from environment, default to localhost with port 3850
+    let baseUrl = process.env.KASIOON_API_URL || 'http://localhost:3850';
+    
+    // Remove trailing slash
+    baseUrl = baseUrl.replace(/\/$/, '');
+    
+    // Remove any /api paths from the URL (we'll add them correctly)
+    // This prevents double /api/search/api/search/structure
+    baseUrl = baseUrl.replace(/\/api\/?.*$/, '');
+    
+    // If no protocol specified, add http://
+    if (!baseUrl.match(/^https?:\/\//)) {
+      baseUrl = `http://${baseUrl}`;
+    }
+    
+    // Only add default port if URL doesn't already have a port specified
+    // Don't force port 3850 if a full URL with port is provided
+    if (!baseUrl.match(/:\d+(\/|$)/)) {
+      // No port specified, add default port 3850 only for localhost
+      if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
+        baseUrl = baseUrl.replace(/:\d+$/, '') + ':3850';
+      }
+    }
+    
+    this.apiUrl = baseUrl;
     this.apiKey = process.env.KASIOON_API_KEY;
 
     // Cache storage

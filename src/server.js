@@ -1,4 +1,7 @@
 const express = require('express');
+const https = require('https');
+const http = require('http');
+const fs = require('fs');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -112,12 +115,60 @@ async function initializeServices() {
   }
 }
 
-// Start server
-app.listen(PORT, async () => {
-  logger.info(`Server running on port ${PORT}`);
-  logger.info(`Environment: ${process.env.NODE_ENV}`);
-  await initializeServices();
-});
+// Start server with HTTPS if SSL certificates are provided
+const SSL_KEY_PATH = process.env.SSL_KEY_PATH;
+const SSL_CERT_PATH = process.env.SSL_CERT_PATH;
+
+let server;
+
+if (SSL_KEY_PATH && SSL_CERT_PATH) {
+  try {
+    // Check if certificate files exist
+    if (!fs.existsSync(SSL_KEY_PATH)) {
+      logger.error(`SSL key file not found: ${SSL_KEY_PATH}`);
+      console.error(`❌ SSL key file not found: ${SSL_KEY_PATH}`);
+      process.exit(1);
+    }
+
+    if (!fs.existsSync(SSL_CERT_PATH)) {
+      logger.error(`SSL certificate file not found: ${SSL_CERT_PATH}`);
+      console.error(`❌ SSL certificate file not found: ${SSL_CERT_PATH}`);
+      process.exit(1);
+    }
+
+    // Read SSL certificates
+    const privateKey = fs.readFileSync(SSL_KEY_PATH, 'utf8');
+    const certificate = fs.readFileSync(SSL_CERT_PATH, 'utf8');
+    const credentials = { key: privateKey, cert: certificate };
+
+    // Create HTTPS server
+    server = https.createServer(credentials, app);
+    
+    server.listen(PORT, async () => {
+      logger.info(`HTTPS Server running on port ${PORT}`);
+      logger.info(`Environment: ${process.env.NODE_ENV}`);
+      console.log(`🔒 HTTPS Server running on port ${PORT}`);
+      console.log(`📜 SSL Certificate: ${SSL_CERT_PATH}`);
+      await initializeServices();
+    });
+
+  } catch (error) {
+    logger.error('Failed to start HTTPS server:', error);
+    console.error('❌ Failed to start HTTPS server:', error.message);
+    process.exit(1);
+  }
+} else {
+  // Fallback to HTTP if SSL certificates are not provided
+  server = http.createServer(app);
+  
+  server.listen(PORT, async () => {
+    logger.info(`HTTP Server running on port ${PORT}`);
+    logger.info(`Environment: ${process.env.NODE_ENV}`);
+    console.log(`⚠️  HTTP Server running on port ${PORT} (SSL not configured)`);
+    console.log(`💡 To enable HTTPS, set SSL_KEY_PATH and SSL_CERT_PATH in .env`);
+    await initializeServices();
+  });
+}
 
 module.exports = app;
 
