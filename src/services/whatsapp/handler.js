@@ -1,9 +1,17 @@
 const axios = require('axios');
 const logger = require('../../utils/logger');
 const { detectLanguage } = require('../../utils/languageDetector');
+const audioProcessor = require('../audio/processor');
+
+// MCP Agent for direct database access (new architecture)
+const mcpAgent = require('../ai/mcpAgent');
+
+// Legacy imports (kept for fallback)
 const aiAgent = require('../ai/agent');
 const marketplaceSearch = require('../search/marketplaceSearch');
-const audioProcessor = require('../audio/processor');
+
+// Feature flag for MCP mode
+const USE_MCP_AGENT = process.env.USE_MCP_AGENT === 'true';
 
 class WhatsAppHandler {
   constructor() {
@@ -69,6 +77,7 @@ class WhatsAppHandler {
   async handleTextMessage(phoneNumber, text) {
     try {
       logger.info(`Processing text message: ${text}`);
+      console.log(`🔧 [WHATSAPP] Mode: ${USE_MCP_AGENT ? 'MCP Agent' : 'Legacy API'}`);
 
       // Detect language from message content
       const detectedLanguage = detectLanguage(text);
@@ -77,30 +86,55 @@ class WhatsAppHandler {
       // Send typing indicator
       await this.sendTypingIndicator(phoneNumber);
 
-      // Analyze message with AI using detected language
-      const searchParams = await aiAgent.analyzeMessage(text, detectedLanguage);
+      let formattedMessage;
 
-      if (Object.keys(searchParams).length === 0) {
-        const noParamsMessage = detectedLanguage === 'ar'
-          ? 'عذراً، لم أفهم طلبك. يرجى تحديد ما تبحث عنه بوضوح أكثر.\nمثال: "أريد تويوتا في حلب"'
-          : 'Sorry, I didn\'t understand your request. Please specify what you\'re looking for more clearly.\nExample: "I want a Toyota in Aleppo"';
-        await this.sendMessage(phoneNumber, noParamsMessage);
-        return;
-      }
+      if (USE_MCP_AGENT) {
+        // ========== MCP AGENT MODE ==========
+        // Direct database queries via Claude with MCP tools
+        console.log('🔧 [WHATSAPP] Using MCP Agent for search');
 
-      // Search marketplace with smart fallback strategies, filter enrichment, and match scoring
-      const searchResponse = await aiAgent.searchMarketplace(searchParams, text, detectedLanguage);
-      const { results, filterDescription } = searchResponse;
+        try {
+          const mcpResult = await mcpAgent.processMessage(text, detectedLanguage);
+          formattedMessage = mcpResult.response;
 
-      // Format results - pass original message for language detection
-      let formattedMessage = await aiAgent.formatResults(results, detectedLanguage, text);
+          logger.info('[MCP] Response generated:', {
+            responseLength: formattedMessage?.length,
+            toolsUsed: mcpResult.toolsUsed
+          });
+        } catch (mcpError) {
+          console.error('❌ [WHATSAPP] MCP Agent error, falling back to legacy:', mcpError.message);
+          // Fallback to legacy mode
+          const searchParams = await aiAgent.analyzeMessage(text, detectedLanguage);
+          const searchResponse = await aiAgent.searchMarketplace(searchParams, text, detectedLanguage);
+          formattedMessage = await aiAgent.formatResults(searchResponse.results, detectedLanguage, text);
+        }
 
-      // Add filter description if filters were matched
-      if (filterDescription && results.length > 0) {
-        const filterHeader = detectedLanguage === 'ar'
-          ? `\n🔍 فلاتر البحث المطبقة:\n${filterDescription}\n\n`
-          : `\n🔍 Applied search filters:\n${filterDescription}\n\n`;
-        formattedMessage = filterHeader + formattedMessage;
+      } else {
+        // ========== LEGACY MODE ==========
+        // API-based search with AI parameter extraction
+        console.log('🔧 [WHATSAPP] Using Legacy API mode for search');
+
+        const searchParams = await aiAgent.analyzeMessage(text, detectedLanguage);
+
+        if (Object.keys(searchParams).length === 0) {
+          const noParamsMessage = detectedLanguage === 'ar'
+            ? 'عذراً، لم أفهم طلبك. يرجى تحديد ما تبحث عنه بوضوح أكثر.\nمثال: "أريد تويوتا في حلب"'
+            : 'Sorry, I didn\'t understand your request. Please specify what you\'re looking for more clearly.\nExample: "I want a Toyota in Aleppo"';
+          await this.sendMessage(phoneNumber, noParamsMessage);
+          return;
+        }
+
+        const searchResponse = await aiAgent.searchMarketplace(searchParams, text, detectedLanguage);
+        const { results, filterDescription } = searchResponse;
+
+        formattedMessage = await aiAgent.formatResults(results, detectedLanguage, text);
+
+        if (filterDescription && results.length > 0) {
+          const filterHeader = detectedLanguage === 'ar'
+            ? `\n🔍 فلاتر البحث المطبقة:\n${filterDescription}\n\n`
+            : `\n🔍 Applied search filters:\n${filterDescription}\n\n`;
+          formattedMessage = filterHeader + formattedMessage;
+        }
       }
 
       // Send results (split if necessary)
@@ -108,18 +142,7 @@ class WhatsAppHandler {
 
     } catch (error) {
       logger.error('Error handling WhatsApp text message:', error);
-      // Try to detect language for error message, default to Arabic
-      const detectLanguage = (messageText) => {
-        if (!messageText || typeof messageText !== 'string') return 'ar';
-        const arabicPattern = /[\u0600-\u06FF]/;
-        const hasArabic = arabicPattern.test(messageText);
-        const arabicChars = (messageText.match(/[\u0600-\u06FF]/g) || []).length;
-        const englishChars = (messageText.match(/[a-zA-Z]/g) || []).length;
-        if (hasArabic && arabicChars > messageText.length * 0.1) return 'ar';
-        if (englishChars > messageText.length * 0.5) return 'en';
-        return 'ar';
-      };
-      const errorLanguage = detectLanguage(text);
+      const errorLanguage = detectLanguage(text) || 'ar';
       const errorMessage = errorLanguage === 'ar'
         ? 'عذراً، حدث خطأ أثناء البحث. يرجى المحاولة مرة أخرى.'
         : 'Sorry, an error occurred during the search. Please try again.';
@@ -140,8 +163,10 @@ class WhatsAppHandler {
       const audioUrl = await this.getMediaUrl(audio.id);
       const audioBuffer = await audioProcessor.downloadAudio(audioUrl);
 
-      // Transcribe
-      const transcribedText = await aiAgent.transcribeAudio(audioBuffer);
+      // Transcribe (use MCP agent if enabled, otherwise use legacy aiAgent)
+      const transcribedText = USE_MCP_AGENT
+        ? await mcpAgent.transcribeAudio(audioBuffer)
+        : await aiAgent.transcribeAudio(audioBuffer);
 
       logger.info('Transcribed text:', transcribedText);
 

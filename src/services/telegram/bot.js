@@ -2,8 +2,6 @@ const { Telegraf } = require('telegraf');
 const { message } = require('telegraf/filters');
 const logger = require('../../utils/logger');
 const { detectLanguage } = require('../../utils/languageDetector');
-const aiAgent = require('../ai/agent');
-const marketplaceSearch = require('../search/marketplaceSearch');
 const audioProcessor = require('../audio/processor');
 const responseFormatter = require('../ai/responseFormatter');
 const searchHistory = require('../db/searchHistory');
@@ -11,8 +9,16 @@ const intentClassifier = require('../ai/intentClassifier');
 const contextManager = require('../conversation/contextManager');
 const historyTracker = require('../conversation/historyTracker');
 
-// Dynamic data management
+// MCP Agent for direct database access (new architecture)
+const mcpAgent = require('../ai/mcpAgent');
+
+// Legacy imports (kept for fallback)
+const aiAgent = require('../ai/agent');
+const marketplaceSearch = require('../search/marketplaceSearch');
 const dynamicDataManager = require('../data/dynamicDataManager');
+
+// Feature flag for MCP mode
+const USE_MCP_AGENT = process.env.USE_MCP_AGENT === 'true';
 
 class TelegramBot {
   constructor() {
@@ -32,28 +38,38 @@ class TelegramBot {
   }
 
   /**
-   * Initialize dynamic data from API
+   * Initialize dynamic data from API or MCP
    * Called on bot startup and refreshed periodically
    */
   async initializeData() {
     try {
-      console.log('🚀 [BOT] Initializing dynamic data...');
+      console.log('🚀 [BOT] Initializing data...');
+      console.log(`🔧 [BOT] Mode: ${USE_MCP_AGENT ? 'MCP Agent (Direct DB)' : 'Legacy API'}`);
 
-      // Load structure from API
-      await dynamicDataManager.loadStructure('ar');
-      await dynamicDataManager.getCategories('ar');
+      if (USE_MCP_AGENT) {
+        // MCP mode: Database connection is initialized in mcpAgent
+        console.log('✅ [BOT] MCP Agent mode - using direct database access');
+        console.log('📊 [BOT] MCP Agent status:', {
+          hasAnthropic: !!mcpAgent.anthropic,
+          hasDatabase: !!mcpAgent.pool
+        });
+      } else {
+        // Legacy mode: Load structure from API
+        await dynamicDataManager.loadStructure('ar');
+        await dynamicDataManager.getCategories('ar');
 
-      console.log('✅ [BOT] Dynamic data initialized');
-      console.log('📊 [BOT] Cache stats:', dynamicDataManager.getCacheStats());
+        console.log('✅ [BOT] Dynamic data initialized (Legacy mode)');
+        console.log('📊 [BOT] Cache stats:', dynamicDataManager.getCacheStats());
 
-      // Schedule periodic refresh every 30 minutes
-      setInterval(async () => {
-        try {
-          await dynamicDataManager.refreshCache('ar');
-        } catch (error) {
-          console.error('❌ [BOT] Error refreshing cache:', error.message);
-        }
-      }, 30 * 60 * 1000);
+        // Schedule periodic refresh every 30 minutes (legacy mode only)
+        setInterval(async () => {
+          try {
+            await dynamicDataManager.refreshCache('ar');
+          } catch (error) {
+            console.error('❌ [BOT] Error refreshing cache:', error.message);
+          }
+        }, 30 * 60 * 1000);
+      }
 
     } catch (error) {
       console.error('❌ [BOT] Error initializing data:', error);
@@ -364,24 +380,24 @@ Send a voice message and I'll understand
 
       // SEARCH FLOW (only reached if intent is SEARCH or unknown)
 
-      // Check DB cache for popular searches first
-      const cachedResults = await searchHistory.getCachedResults(userMessage);
-      if (cachedResults) {
-        logger.info('[TELEGRAM] Using cached results');
-        // Send cached results as separate messages too
-        await this.sendResultsAsSeparateMessages(ctx, cachedResults, language, null);
+      // Check DB cache for popular searches first (skip in MCP mode for real-time data)
+      if (!USE_MCP_AGENT) {
+        const cachedResults = await searchHistory.getCachedResults(userMessage);
+        if (cachedResults) {
+          logger.info('[TELEGRAM] Using cached results');
+          await this.sendResultsAsSeparateMessages(ctx, cachedResults, language, null);
 
-        // Still log the search
-        await searchHistory.logSearch({
-          userId,
-          queryText: userMessage,
-          resultsCount: cachedResults.length,
-          responseTimeMs: Date.now() - startTime,
-          language,
-          intent: intentResult.intent,
-          intentConfidence: intentResult.confidence
-        });
-        return;
+          await searchHistory.logSearch({
+            userId,
+            queryText: userMessage,
+            resultsCount: cachedResults.length,
+            responseTimeMs: Date.now() - startTime,
+            language,
+            intent: intentResult.intent,
+            intentConfidence: intentResult.confidence
+          });
+          return;
+        }
       }
 
       // Send "searching" message
@@ -389,37 +405,71 @@ Send a voice message and I'll understand
         language === 'ar' ? '🔍 جاري البحث...' : '🔍 Searching...'
       );
 
-      // Analyze message with AI
-      // NOTE: You can switch to dynamic analysis by using:
-      // const extractedParams = await aiAgent.analyzeMessageDynamic(userMessage, language);
-      // This uses 100% API-fetched data with AI fallback for low confidence results
-      const extractedParams = await aiAgent.analyzeMessage(userMessage, language);
-      logger.info('[AI] Extracted params:', extractedParams);
+      let formattedResponse;
+      let extractedParams = {};
+      let resultsCount = 0;
 
-      // Search marketplace with smart fallback strategies, filter enrichment, and match scoring
-      const searchResponse = await aiAgent.searchMarketplace(extractedParams, userMessage, language);
-      const { results: filteredResults, filterDescription, matchedFilters } = searchResponse;
+      if (USE_MCP_AGENT) {
+        // ========== MCP AGENT MODE ==========
+        // Direct database queries via Claude with MCP tools
+        console.log('🔧 [TELEGRAM] Using MCP Agent for search');
 
-      // Delete "searching" message
-      await ctx.deleteMessage(searchingMsg.message_id).catch(() => {});
+        try {
+          const mcpResult = await mcpAgent.processMessage(userMessage, language);
+          formattedResponse = mcpResult.response;
+          resultsCount = mcpResult.toolsUsed > 0 ? 1 : 0; // Approximate
+          extractedParams = { _source: 'mcp_agent', toolsUsed: mcpResult.toolsUsed };
 
-      // Format and send response
-      if (filteredResults.length > 0) {
-        // Send each listing as a separate message for better URL preview loading
-        await this.sendResultsAsSeparateMessages(ctx, filteredResults, language, extractedParams);
-
-        // Cache results if enough results
-        if (filteredResults.length >= 3) {
-          await searchHistory.cacheResults(userMessage, filteredResults);
+          logger.info('[MCP] Response generated:', {
+            responseLength: formattedResponse?.length,
+            toolsUsed: mcpResult.toolsUsed
+          });
+        } catch (mcpError) {
+          console.error('❌ [TELEGRAM] MCP Agent error, falling back to legacy:', mcpError.message);
+          // Fallback to legacy mode
+          const fallbackParams = await aiAgent.analyzeMessage(userMessage, language);
+          const fallbackResponse = await aiAgent.searchMarketplace(fallbackParams, userMessage, language);
+          formattedResponse = await aiAgent.formatResults(fallbackResponse.results, language, userMessage);
+          extractedParams = fallbackParams;
+          resultsCount = fallbackResponse.results?.length || 0;
         }
-      } else {
-        // Send no results message
-        const noResultsMessage = responseFormatter.getNoResultsMessage(language, extractedParams);
-        await this.sendFormattedMessage(ctx, noResultsMessage);
-      }
 
-      // Save search results to context manager
-      contextManager.saveSearchResults(userId, extractedParams, filteredResults);
+        // Delete "searching" message
+        await ctx.deleteMessage(searchingMsg.message_id).catch(() => {});
+
+        // Send the MCP-generated response directly
+        await this.sendFormattedMessage(ctx, formattedResponse);
+
+      } else {
+        // ========== LEGACY MODE ==========
+        // API-based search with AI parameter extraction
+        console.log('🔧 [TELEGRAM] Using Legacy API mode for search');
+
+        extractedParams = await aiAgent.analyzeMessage(userMessage, language);
+        logger.info('[AI] Extracted params:', extractedParams);
+
+        const searchResponse = await aiAgent.searchMarketplace(extractedParams, userMessage, language);
+        const { results: filteredResults, filterDescription, matchedFilters } = searchResponse;
+        resultsCount = filteredResults?.length || 0;
+
+        // Delete "searching" message
+        await ctx.deleteMessage(searchingMsg.message_id).catch(() => {});
+
+        // Format and send response
+        if (filteredResults.length > 0) {
+          await this.sendResultsAsSeparateMessages(ctx, filteredResults, language, extractedParams);
+
+          if (filteredResults.length >= 3) {
+            await searchHistory.cacheResults(userMessage, filteredResults);
+          }
+        } else {
+          const noResultsMessage = responseFormatter.getNoResultsMessage(language, extractedParams);
+          await this.sendFormattedMessage(ctx, noResultsMessage);
+        }
+
+        // Save search results to context manager
+        contextManager.saveSearchResults(userId, extractedParams, filteredResults);
+      }
 
       // Log search to database
       const responseTime = Date.now() - startTime;
@@ -428,16 +478,17 @@ Send a voice message and I'll understand
         platform: 'telegram',
         queryText: userMessage,
         extractedParams,
-        resultsCount: filteredResults.length,
+        resultsCount,
         responseTimeMs: responseTime,
         category: extractedParams.category,
         city: extractedParams.city,
         language,
         intent: intentResult.intent,
-        intentConfidence: intentResult.confidence
+        intentConfidence: intentResult.confidence,
+        mode: USE_MCP_AGENT ? 'mcp' : 'legacy'
       });
 
-      logger.info(`[TELEGRAM] Response sent in ${responseTime}ms`);
+      logger.info(`[TELEGRAM] Response sent in ${responseTime}ms (${USE_MCP_AGENT ? 'MCP' : 'Legacy'} mode)`);
 
 
     } catch (error) {
@@ -515,7 +566,10 @@ Send a voice message and I'll understand
       
       let transcribedText;
       try {
-        transcribedText = await aiAgent.transcribeAudio(audioBuffer);
+        // Use MCP agent for transcription if enabled, otherwise use legacy aiAgent
+        transcribedText = USE_MCP_AGENT
+          ? await mcpAgent.transcribeAudio(audioBuffer)
+          : await aiAgent.transcribeAudio(audioBuffer);
         console.log('🎤 [VOICE-DEBUG] Step 4: Transcription completed:', {
           transcribed_text: transcribedText,
           text_length: transcribedText?.length,
