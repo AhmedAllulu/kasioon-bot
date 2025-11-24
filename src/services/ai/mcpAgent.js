@@ -250,13 +250,45 @@ Common attribute slugs by category:
       },
       {
         name: 'find_category',
-        description: 'Find the most appropriate LEAF category based on user keywords',
+        description: 'Find the most appropriate LEAF category based on user keywords. Searches in names, slugs, AND descriptions.',
         input_schema: {
           type: 'object',
           properties: {
             keywords: {
               type: 'string',
-              description: 'Keywords to search for in category names (e.g., "شقة", "apartment", "سيارة")'
+              description: 'Keywords to search for in category names and descriptions (e.g., "شقة", "apartment", "سيارة", "أرض زراعية")'
+            },
+            parent_id: {
+              type: 'string',
+              description: 'Optional: Limit search to children of this parent category (UUID)'
+            },
+            search_in_description: {
+              type: 'boolean',
+              description: 'Whether to search in category descriptions (default: true)',
+              default: true
+            }
+          },
+          required: ['keywords']
+        }
+      },
+      {
+        name: 'deep_search_categories',
+        description: 'Recursively search through all category levels to find matching categories. Use this when find_category returns no results.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            keywords: {
+              type: 'string',
+              description: 'Keywords to search for across all category levels and descriptions'
+            },
+            max_depth: {
+              type: 'integer',
+              description: 'Maximum depth to search (default: 3)',
+              default: 3
+            },
+            root_category_id: {
+              type: 'string',
+              description: 'Optional: Start search from a specific root category (UUID)'
             }
           },
           required: ['keywords']
@@ -376,6 +408,8 @@ Common attribute slugs by category:
         return this.getListingDetails(toolInput);
       case 'find_category':
         return this.findCategory(toolInput);
+      case 'deep_search_categories':
+        return this.deepSearchCategories(toolInput);
       default:
         throw new Error(`Unknown tool: ${toolName}`);
     }
@@ -523,10 +557,17 @@ Common attribute slugs by category:
 
   /**
    * Get root categories (level 0) - Progressive navigation step 1
+   * Enhanced to include descriptions for better understanding
    */
   async getRootCategories() {
     const query = `
-      SELECT id, name_ar, slug
+      SELECT
+        id,
+        name_ar,
+        name_en,
+        slug,
+        description_ar,
+        description_en
       FROM categories
       WHERE parent_id IS NULL AND is_active = true
       ORDER BY sort_order ASC
@@ -535,8 +576,22 @@ Common attribute slugs by category:
     try {
       const result = await this.pool.query(query);
       console.log(`✅ [MCP-AGENT] Found ${result.rows.length} root categories`);
+
+      // Log root categories for debugging
+      result.rows.forEach((cat, idx) => {
+        console.log(`   ${idx + 1}. ${cat.name_ar} (${cat.slug})`);
+      });
+
       return {
-        categories: result.rows,
+        categories: result.rows.map(cat => ({
+          id: cat.id,
+          name_ar: cat.name_ar,
+          name_en: cat.name_en,
+          slug: cat.slug,
+          description_ar: cat.description_ar,
+          description_en: cat.description_en
+        })),
+        count: result.rows.length,
         message: 'اختر فئة رئيسية'
       };
     } catch (error) {
@@ -547,27 +602,53 @@ Common attribute slugs by category:
 
   /**
    * Get child categories for a parent - Progressive navigation step 2+
+   * Enhanced to include descriptions for better understanding
    */
   async getChildCategories(parentId) {
     const query = `
       SELECT
-        id, name_ar, slug,
+        c.id,
+        c.name_ar,
+        c.name_en,
+        c.slug,
+        c.description_ar,
+        c.description_en,
+        c.level,
         NOT EXISTS(
-          SELECT 1 FROM categories
-          WHERE parent_id = c.id AND is_active = true
+          SELECT 1 FROM categories child
+          WHERE child.parent_id = c.id AND child.is_active = true
         ) as is_leaf
       FROM categories c
-      WHERE parent_id = $1 AND is_active = true
-      ORDER BY sort_order ASC
+      WHERE c.parent_id = $1 AND c.is_active = true
+      ORDER BY c.sort_order ASC
       LIMIT 50
     `;
 
     try {
       const result = await this.pool.query(query, [parentId]);
       console.log(`✅ [MCP-AGENT] Found ${result.rows.length} child categories for parent ${parentId}`);
+
+      // Log categories with their descriptions for debugging
+      result.rows.forEach((cat, idx) => {
+        console.log(`   ${idx + 1}. ${cat.name_ar} (${cat.slug}) - IsLeaf: ${cat.is_leaf}`);
+        if (cat.description_ar) {
+          console.log(`      Description: ${cat.description_ar.substring(0, 80)}...`);
+        }
+      });
+
       return {
-        categories: result.rows,
-        parent_id: parentId
+        categories: result.rows.map(cat => ({
+          id: cat.id,
+          name_ar: cat.name_ar,
+          name_en: cat.name_en,
+          slug: cat.slug,
+          description_ar: cat.description_ar,
+          description_en: cat.description_en,
+          is_leaf: cat.is_leaf,
+          level: cat.level
+        })),
+        parent_id: parentId,
+        count: result.rows.length
       };
     } catch (error) {
       console.error('❌ [MCP-AGENT] Child categories query error:', error.message);
@@ -679,58 +760,313 @@ Common attribute slugs by category:
 
   /**
    * Find matching LEAF category based on keywords
+   * Enhanced to search in descriptions and support parent filtering
    */
   async findCategory(params) {
-    const { keywords } = params;
+    const {
+      keywords,
+      parent_id = null,
+      search_in_description = true
+    } = params;
 
-    const query = `
+    console.log(`🔍 [MCP-AGENT] Finding category with keywords: "${keywords}", parent_id: ${parent_id}, search_in_description: ${search_in_description}`);
+
+    // Build dynamic query based on parameters
+    let query = `
       SELECT
         c.id,
         c.name_ar,
         c.name_en,
         c.slug,
+        c.description_ar,
+        c.description_en,
         c.level,
         p.slug as parent_slug,
         p.name_ar as parent_name,
+        p.id as parent_id,
         NOT EXISTS (
           SELECT 1 FROM categories child
           WHERE child.parent_id = c.id AND child.is_active = true
         ) as is_leaf,
         CASE
+          -- Exact match in name (highest priority)
           WHEN c.name_ar = $1 OR c.name_en = $1 THEN 100
-          WHEN c.name_ar ILIKE $1 || '%' OR c.name_en ILIKE $1 || '%' THEN 80
-          WHEN c.name_ar ILIKE '%' || $1 || '%' OR c.name_en ILIKE '%' || $1 || '%' THEN 60
+          -- Starts with keyword in name
+          WHEN c.name_ar ILIKE $1 || '%' OR c.name_en ILIKE $1 || '%' THEN 90
+          -- Contains keyword in name
+          WHEN c.name_ar ILIKE '%' || $1 || '%' OR c.name_en ILIKE '%' || $1 || '%' THEN 70
+          -- Slug match
+          WHEN c.slug ILIKE '%' || $1 || '%' THEN 60
+          -- Description match (lower priority)
+          WHEN c.description_ar ILIKE '%' || $1 || '%' OR c.description_en ILIKE '%' || $1 || '%' THEN 50
           ELSE 40
-        END as match_score
+        END as match_score,
+        CASE
+          WHEN c.name_ar ILIKE '%' || $1 || '%' OR c.name_en ILIKE '%' || $1 || '%' THEN 'name'
+          WHEN c.slug ILIKE '%' || $1 || '%' THEN 'slug'
+          WHEN c.description_ar ILIKE '%' || $1 || '%' OR c.description_en ILIKE '%' || $1 || '%' THEN 'description'
+          ELSE 'none'
+        END as matched_field
       FROM categories c
       LEFT JOIN categories p ON c.parent_id = p.id
       WHERE c.is_active = true
-        AND (c.name_ar ILIKE '%' || $1 || '%' OR c.name_en ILIKE '%' || $1 || '%' OR c.slug ILIKE '%' || $1 || '%')
+    `;
+
+    const queryParams = [keywords];
+    let paramIndex = 2;
+
+    // Add parent_id filter if specified
+    if (parent_id) {
+      query += ` AND c.parent_id = $${paramIndex}`;
+      queryParams.push(parent_id);
+      paramIndex++;
+    }
+
+    // Add search conditions
+    if (search_in_description) {
+      query += ` AND (
+        c.name_ar ILIKE '%' || $1 || '%' OR
+        c.name_en ILIKE '%' || $1 || '%' OR
+        c.slug ILIKE '%' || $1 || '%' OR
+        c.description_ar ILIKE '%' || $1 || '%' OR
+        c.description_en ILIKE '%' || $1 || '%'
+      )`;
+    } else {
+      query += ` AND (
+        c.name_ar ILIKE '%' || $1 || '%' OR
+        c.name_en ILIKE '%' || $1 || '%' OR
+        c.slug ILIKE '%' || $1 || '%'
+      )`;
+    }
+
+    query += `
       ORDER BY
         is_leaf DESC,
         match_score DESC,
         c.level DESC
-      LIMIT 5
+      LIMIT 10
     `;
 
     try {
-      const result = await this.pool.query(query, [keywords]);
+      const result = await this.pool.query(query, queryParams);
 
       console.log(`✅ [MCP-AGENT] Found ${result.rows.length} matching categories for "${keywords}"`);
+
+      // Log matches for debugging
+      result.rows.forEach((cat, idx) => {
+        console.log(`   ${idx + 1}. ${cat.name_ar} (${cat.slug}) - Score: ${cat.match_score}, Field: ${cat.matched_field}, IsLeaf: ${cat.is_leaf}`);
+      });
 
       const leafCategories = result.rows.filter(c => c.is_leaf);
       const bestMatch = leafCategories.length > 0 ? leafCategories[0] : result.rows[0];
 
+      // Build parent context for non-leaf categories
+      const categoriesWithContext = result.rows.map(cat => ({
+        id: cat.id,
+        name_ar: cat.name_ar,
+        name_en: cat.name_en,
+        slug: cat.slug,
+        level: cat.level,
+        is_leaf: cat.is_leaf,
+        match_score: cat.match_score,
+        matched_field: cat.matched_field,
+        parent_name: cat.parent_name,
+        parent_slug: cat.parent_slug,
+        description_snippet: cat.matched_field === 'description'
+          ? (cat.description_ar || cat.description_en || '').substring(0, 100) + '...'
+          : null
+      }));
+
       return {
-        categories: result.rows,
-        best_match: bestMatch,
+        categories: categoriesWithContext,
+        best_match: bestMatch ? {
+          id: bestMatch.id,
+          name_ar: bestMatch.name_ar,
+          slug: bestMatch.slug,
+          is_leaf: bestMatch.is_leaf,
+          match_score: bestMatch.match_score,
+          matched_field: bestMatch.matched_field,
+          parent_name: bestMatch.parent_name
+        } : null,
+        leaf_count: leafCategories.length,
+        total_count: result.rows.length,
         suggestion: bestMatch
-          ? `Use category slug: "${bestMatch.slug}" (${bestMatch.name_ar})`
-          : 'No matching category found'
+          ? `Found "${bestMatch.name_ar}" (slug: "${bestMatch.slug}"). ${bestMatch.is_leaf ? 'This is a leaf category - ready to search!' : 'This is NOT a leaf category - get child categories first.'}`
+          : parent_id
+            ? `No categories found under parent ${parent_id} for "${keywords}". Try searching in a different parent category or use deep_search_categories.`
+            : `No categories found for "${keywords}". Try using deep_search_categories to search more thoroughly.`
       };
 
     } catch (error) {
       console.error('❌ [MCP-AGENT] Category search error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Deep search through category tree recursively
+   * Use this when simple find_category returns no results
+   */
+  async deepSearchCategories(params) {
+    const {
+      keywords,
+      max_depth = 3,
+      root_category_id = null
+    } = params;
+
+    console.log(`🔎 [MCP-AGENT] Starting deep search for "${keywords}", max_depth: ${max_depth}, root: ${root_category_id || 'all'}`);
+
+    try {
+      // Step 1: Get all categories up to max_depth
+      let baseQuery = `
+        WITH RECURSIVE category_tree AS (
+          -- Base case: root categories or specified root
+          SELECT
+            c.id,
+            c.name_ar,
+            c.name_en,
+            c.slug,
+            c.description_ar,
+            c.description_en,
+            c.level,
+            c.parent_id,
+            ARRAY[c.id] as path_ids,
+            ARRAY[c.name_ar] as path_names,
+            NOT EXISTS (
+              SELECT 1 FROM categories child
+              WHERE child.parent_id = c.id AND child.is_active = true
+            ) as is_leaf,
+            0 as depth
+          FROM categories c
+          WHERE c.is_active = true
+      `;
+
+      const queryParams = [];
+      let paramIndex = 1;
+
+      if (root_category_id) {
+        baseQuery += ` AND c.id = $${paramIndex}`;
+        queryParams.push(root_category_id);
+        paramIndex++;
+      } else {
+        baseQuery += ` AND c.parent_id IS NULL`;
+      }
+
+      baseQuery += `
+          UNION ALL
+
+          -- Recursive case: get children
+          SELECT
+            c.id,
+            c.name_ar,
+            c.name_en,
+            c.slug,
+            c.description_ar,
+            c.description_en,
+            c.level,
+            c.parent_id,
+            ct.path_ids || c.id,
+            ct.path_names || c.name_ar,
+            NOT EXISTS (
+              SELECT 1 FROM categories child
+              WHERE child.parent_id = c.id AND child.is_active = true
+            ) as is_leaf,
+            ct.depth + 1
+          FROM categories c
+          INNER JOIN category_tree ct ON c.parent_id = ct.id
+          WHERE c.is_active = true
+            AND ct.depth < $${paramIndex}
+        )
+        SELECT
+          *,
+          CASE
+            -- Exact match in name (highest priority)
+            WHEN name_ar = $${paramIndex + 1} OR name_en = $${paramIndex + 1} THEN 100
+            -- Starts with keyword in name
+            WHEN name_ar ILIKE $${paramIndex + 1} || '%' OR name_en ILIKE $${paramIndex + 1} || '%' THEN 90
+            -- Contains keyword in name
+            WHEN name_ar ILIKE '%' || $${paramIndex + 1} || '%' OR name_en ILIKE '%' || $${paramIndex + 1} || '%' THEN 70
+            -- Slug match
+            WHEN slug ILIKE '%' || $${paramIndex + 1} || '%' THEN 60
+            -- Description match (lower priority)
+            WHEN description_ar ILIKE '%' || $${paramIndex + 1} || '%' OR description_en ILIKE '%' || $${paramIndex + 1} || '%' THEN 50
+            ELSE 0
+          END as match_score,
+          CASE
+            WHEN name_ar ILIKE '%' || $${paramIndex + 1} || '%' OR name_en ILIKE '%' || $${paramIndex + 1} || '%' THEN 'name'
+            WHEN slug ILIKE '%' || $${paramIndex + 1} || '%' THEN 'slug'
+            WHEN description_ar ILIKE '%' || $${paramIndex + 1} || '%' OR description_en ILIKE '%' || $${paramIndex + 1} || '%' THEN 'description'
+            ELSE 'none'
+          END as matched_field
+        FROM category_tree
+        WHERE
+          name_ar ILIKE '%' || $${paramIndex + 1} || '%' OR
+          name_en ILIKE '%' || $${paramIndex + 1} || '%' OR
+          slug ILIKE '%' || $${paramIndex + 1} || '%' OR
+          description_ar ILIKE '%' || $${paramIndex + 1} || '%' OR
+          description_en ILIKE '%' || $${paramIndex + 1} || '%'
+        ORDER BY
+          is_leaf DESC,
+          match_score DESC,
+          depth ASC
+        LIMIT 15
+      `;
+
+      queryParams.push(max_depth, keywords);
+
+      const result = await this.pool.query(baseQuery, queryParams);
+
+      console.log(`✅ [MCP-AGENT] Deep search found ${result.rows.length} categories`);
+
+      // Log detailed matches
+      result.rows.forEach((cat, idx) => {
+        const pathStr = cat.path_names.join(' > ');
+        console.log(`   ${idx + 1}. ${pathStr}`);
+        console.log(`      Score: ${cat.match_score}, Field: ${cat.matched_field}, IsLeaf: ${cat.is_leaf}, Depth: ${cat.depth}`);
+      });
+
+      const leafCategories = result.rows.filter(c => c.is_leaf);
+      const bestMatch = leafCategories.length > 0 ? leafCategories[0] : result.rows[0];
+
+      // Format results with full path context
+      const categoriesWithPath = result.rows.map(cat => ({
+        id: cat.id,
+        name_ar: cat.name_ar,
+        name_en: cat.name_en,
+        slug: cat.slug,
+        level: cat.level,
+        is_leaf: cat.is_leaf,
+        match_score: cat.match_score,
+        matched_field: cat.matched_field,
+        depth: cat.depth,
+        path_names: cat.path_names,
+        path_string: cat.path_names.join(' > '),
+        description_snippet: cat.matched_field === 'description'
+          ? (cat.description_ar || cat.description_en || '').substring(0, 150) + '...'
+          : null
+      }));
+
+      return {
+        categories: categoriesWithPath,
+        best_match: bestMatch ? {
+          id: bestMatch.id,
+          name_ar: bestMatch.name_ar,
+          slug: bestMatch.slug,
+          is_leaf: bestMatch.is_leaf,
+          match_score: bestMatch.match_score,
+          matched_field: bestMatch.matched_field,
+          path_string: bestMatch.path_names.join(' > ')
+        } : null,
+        leaf_count: leafCategories.length,
+        total_count: result.rows.length,
+        search_depth: max_depth,
+        suggestion: bestMatch
+          ? `Found "${bestMatch.name_ar}" via path: ${bestMatch.path_names.join(' > ')}. ${bestMatch.is_leaf ? 'This is a leaf category - use slug "' + bestMatch.slug + '" to search listings!' : 'Get children with get_child_categories("' + bestMatch.id + '")'}`
+          : `No categories found for "${keywords}" even with deep search. The category might not exist, or try different keywords.`
+      };
+
+    } catch (error) {
+      console.error('❌ [MCP-AGENT] Deep search error:', error.message);
       throw error;
     }
   }
