@@ -1453,6 +1453,979 @@ Use emojis to make the message more engaging. Be clear and concise. Make sure to
       throw error;
     }
   }
+
+  // =========================================================================
+  // 🆕 NEW: DIRECT DATABASE SEARCH METHODS (MCP-POWERED)
+  // =========================================================================
+
+  /**
+   * 🆕 Extract keywords from user message
+   * استخراج الكلمات المفتاحية من رسالة المستخدم
+   *
+   * @param {string} userMessage - User message
+   * @param {string} language - Language code (ar/en)
+   * @returns {Array<string>} Extracted keywords
+   */
+  extractKeywords(userMessage, language = 'ar') {
+    console.log('🔑 [KEYWORDS] Extracting keywords from message...');
+
+    // Stop words to remove (Arabic)
+    const stopWordsAr = ['بدي', 'بدك', 'أريد', 'في', 'من', 'إلى', 'على', 'عن', 'مع', 'هل', 'ما', 'كيف'];
+    const stopWordsEn = ['i', 'want', 'need', 'looking', 'for', 'in', 'at', 'to', 'from', 'with', 'the', 'a', 'an'];
+
+    const stopWords = language === 'ar' ? stopWordsAr : stopWordsEn;
+
+    // Split and filter
+    const words = userMessage
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(word => {
+        // Remove stop words and short words (< 2 chars)
+        return !stopWords.includes(word) && word.length > 2;
+      })
+      .slice(0, 5); // Take top 5 keywords max
+
+    console.log('🔑 [KEYWORDS] Extracted:', words);
+    return words;
+  }
+
+  /**
+   * 🆕 Search categories directly from database with LIMIT 5
+   * البحث المباشر في الفئات من قاعدة البيانات
+   *
+   * @param {string} keyword - Search keyword
+   * @param {string} language - Language code (ar/en)
+   * @returns {Promise<Array>} Category results (max 5)
+   */
+  async searchCategoriesDirectly(keyword, language = 'ar') {
+    try {
+      console.log(`🔍 [MCP-CATEGORIES] Searching for: "${keyword}" (${language})`);
+
+      const mcp = require('../mcp');
+      const nameField = language === 'ar' ? 'name_ar' : 'name_en';
+      const descField = language === 'ar' ? 'description_ar' : 'description_en';
+
+      // Priority-based search: NAME first, then DESCRIPTION
+      const query = `
+        SELECT
+          id,
+          slug,
+          ${nameField} as name,
+          ${descField} as description,
+          parent_id,
+          level,
+          path,
+          (SELECT COUNT(*) FROM categories c2 WHERE c2.parent_id = categories.id AND c2.is_active = true) > 0 as has_children,
+          CASE
+            WHEN ${nameField} ILIKE $1 THEN 1
+            WHEN ${nameField} ILIKE $2 THEN 2
+            WHEN ${descField} ILIKE $2 THEN 3
+            ELSE 4
+          END as relevance
+        FROM categories
+        WHERE
+          is_active = true
+          AND (${nameField} ILIKE $2 OR ${descField} ILIKE $2)
+        ORDER BY relevance ASC, level DESC
+        LIMIT 5
+      `;
+
+      const result = await mcp.client.query(query, [keyword, `%${keyword}%`]);
+
+      console.log(`📂 [MCP-CATEGORIES] Found ${result.rows.length} categories`);
+
+      return result.rows.map(row => ({
+        id: row.id,
+        slug: row.slug,
+        name: row.name,
+        description: row.description,
+        parentId: row.parent_id,
+        level: row.level,
+        path: row.path,
+        hasChildren: row.has_children,
+        relevance: row.relevance
+      }));
+
+    } catch (error) {
+      console.error('❌ [MCP-CATEGORIES] Error:', error.message);
+      logger.error('Error searching categories directly:', error);
+      return [];
+    }
+  }
+
+  /**
+   * 🆕 Search listings for hints (colloquial language support)
+   * البحث في الإعلانات للحصول على تلميحات عن الفئة الصحيحة
+   *
+   * @param {string} keyword - Search keyword
+   * @param {string} language - Language code (ar/en)
+   * @returns {Promise<Array>} Listing hints (max 5)
+   */
+  async searchListingsForHints(keyword, language = 'ar') {
+    try {
+      console.log(`🔍 [MCP-HINTS] Searching listings for hints: "${keyword}"`);
+
+      const mcp = require('../mcp');
+      const nameField = language === 'ar' ? 'name_ar' : 'name_en';
+
+      const query = `
+        SELECT
+          l.id,
+          l.title,
+          l.category_id,
+          c.slug as category_slug,
+          c.${nameField} as category_name,
+          c.path as category_path
+        FROM listings l
+        JOIN categories c ON l.category_id = c.id
+        WHERE
+          l.status = 'active'
+          AND l.title ILIKE $1
+        ORDER BY l.created_at DESC
+        LIMIT 5
+      `;
+
+      const result = await mcp.client.query(query, [`%${keyword}%`]);
+
+      console.log(`📋 [MCP-HINTS] Found ${result.rows.length} listing hints`);
+
+      return result.rows.map(row => ({
+        id: row.id,
+        title: row.title,
+        categoryId: row.category_id,
+        categorySlug: row.category_slug,
+        categoryName: row.category_name,
+        categoryPath: row.category_path
+      }));
+
+    } catch (error) {
+      console.error('❌ [MCP-HINTS] Error:', error.message);
+      logger.error('Error searching listings for hints:', error);
+      return [];
+    }
+  }
+
+  /**
+   * 🆕 Get category children (for refinement)
+   * جلب الفئات الفرعية لفئة معينة
+   *
+   * @param {string} parentId - Parent category UUID
+   * @param {string} language - Language code (ar/en)
+   * @returns {Promise<Array>} Child categories
+   */
+  async getCategoryChildren(parentId, language = 'ar') {
+    try {
+      console.log(`👶 [MCP-CHILDREN] Getting children for category: ${parentId}`);
+
+      const mcp = require('../mcp');
+      const nameField = language === 'ar' ? 'name_ar' : 'name_en';
+
+      const query = `
+        SELECT
+          id,
+          slug,
+          ${nameField} as name,
+          sort_order,
+          (SELECT COUNT(*) FROM categories c2 WHERE c2.parent_id = categories.id AND c2.is_active = true) > 0 as has_children
+        FROM categories
+        WHERE
+          parent_id = $1
+          AND is_active = true
+        ORDER BY sort_order ASC
+        LIMIT 10
+      `;
+
+      const result = await mcp.client.query(query, [parentId]);
+
+      console.log(`👶 [MCP-CHILDREN] Found ${result.rows.length} children`);
+
+      return result.rows.map(row => ({
+        id: row.id,
+        slug: row.slug,
+        name: row.name,
+        sortOrder: row.sort_order,
+        hasChildren: row.has_children
+      }));
+
+    } catch (error) {
+      console.error('❌ [MCP-CHILDREN] Error:', error.message);
+      logger.error('Error getting category children:', error);
+      return [];
+    }
+  }
+
+  /**
+   * 🆕 Execute final listing search with filters
+   * تنفيذ البحث النهائي في الإعلانات مع الفلاتر
+   *
+   * @param {Object} params - Search parameters
+   * @param {string} language - Language code (ar/en)
+   * @returns {Promise<Array>} Search results (max 20)
+   */
+  async executeListingSearch(params, language = 'ar') {
+    try {
+      console.log('🎯 [MCP-SEARCH] Executing final listing search...');
+      console.log('📋 [MCP-SEARCH] Params:', JSON.stringify(params, null, 2));
+
+      const mcp = require('../mcp');
+      const {
+        categorySlug,
+        cityName,
+        transactionType,
+        minPrice,
+        maxPrice,
+        attributes = {}
+      } = params;
+
+      const nameField = language === 'ar' ? 'name_ar' : 'name_en';
+
+      // Build dynamic WHERE clause
+      let whereConditions = ['l.status = $1'];
+      let queryParams = ['active'];
+      let paramIndex = 2;
+
+      // Category filter
+      if (categorySlug) {
+        whereConditions.push(`c.slug = $${paramIndex}`);
+        queryParams.push(categorySlug);
+        paramIndex++;
+      }
+
+      // City filter
+      if (cityName) {
+        whereConditions.push(`(city.name_ar ILIKE $${paramIndex} OR city.name_en ILIKE $${paramIndex})`);
+        queryParams.push(`%${cityName}%`);
+        paramIndex++;
+      }
+
+      // Transaction type filter
+      if (transactionType) {
+        whereConditions.push(`tt.slug = $${paramIndex}`);
+        queryParams.push(transactionType);
+        paramIndex++;
+      }
+
+      // Price filters
+      if (minPrice !== undefined && minPrice !== null) {
+        whereConditions.push(`EXISTS (
+          SELECT 1 FROM listing_attribute_values lav
+          JOIN listing_attributes la ON lav.attribute_id = la.id
+          WHERE lav.listing_id = l.id
+            AND la.slug = 'price'
+            AND lav.value_number >= $${paramIndex}
+        )`);
+        queryParams.push(minPrice);
+        paramIndex++;
+      }
+
+      if (maxPrice !== undefined && maxPrice !== null) {
+        whereConditions.push(`EXISTS (
+          SELECT 1 FROM listing_attribute_values lav
+          JOIN listing_attributes la ON lav.attribute_id = la.id
+          WHERE lav.listing_id = l.id
+            AND la.slug = 'price'
+            AND lav.value_number <= $${paramIndex}
+        )`);
+        queryParams.push(maxPrice);
+        paramIndex++;
+      }
+
+      // Dynamic attributes filters (JSONB or text)
+      Object.keys(attributes).forEach(attrKey => {
+        const attrValue = attributes[attrKey];
+
+        if (attrValue !== undefined && attrValue !== null) {
+          whereConditions.push(`EXISTS (
+            SELECT 1 FROM listing_attribute_values lav
+            JOIN listing_attributes la ON lav.attribute_id = la.id
+            WHERE lav.listing_id = l.id
+              AND la.slug = $${paramIndex}
+              AND (
+                lav.value_text ILIKE $${paramIndex + 1}
+                OR lav.value_number = $${paramIndex + 1}::numeric
+              )
+          )`);
+          queryParams.push(attrKey, `%${attrValue}%`);
+          paramIndex += 2;
+        }
+      });
+
+      const query = `
+        SELECT
+          l.id,
+          l.title,
+          l.description,
+          l.slug,
+          l.images,
+          l.created_at,
+          c.${nameField} as category_name,
+          c.slug as category_slug,
+          city.${nameField} as city_name,
+          city.province_ar as province,
+          tt.${nameField} as transaction_type,
+          (SELECT lav.value_number
+           FROM listing_attribute_values lav
+           JOIN listing_attributes la ON lav.attribute_id = la.id
+           WHERE lav.listing_id = l.id AND la.slug = 'price'
+          ) as price
+        FROM listings l
+        JOIN categories c ON l.category_id = c.id
+        LEFT JOIN cities city ON l.city_id = city.id
+        LEFT JOIN transaction_types tt ON l.transaction_type_id = tt.id
+        WHERE ${whereConditions.join(' AND ')}
+        ORDER BY l.is_boosted DESC, l.created_at DESC
+        LIMIT 20
+      `;
+
+      const result = await mcp.client.query(query, queryParams);
+
+      console.log(`✅ [MCP-SEARCH] Found ${result.rows.length} listings`);
+
+      // Format results
+      return result.rows.map(row => ({
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        slug: row.slug,
+        images: row.images,
+        price: row.price,
+        categoryName: row.category_name,
+        categorySlug: row.category_slug,
+        cityName: row.city_name,
+        province: row.province,
+        transactionType: row.transaction_type,
+        createdAt: row.created_at,
+        listingUrl: `https://www.kasioon.com/listing/${row.slug || row.id}/`
+      }));
+
+    } catch (error) {
+      console.error('❌ [MCP-SEARCH] Error:', error.message);
+      logger.error('Error executing listing search:', error);
+      return [];
+    }
+  }
+
+  /**
+   * 🆕 Analyze search results with AI using minimal context
+   * تحليل نتائج البحث بواسطة AI مع سياق محدود جداً
+   *
+   * @param {string} userMessage - User query
+   * @param {Array} categoryResults - Category search results (max 5)
+   * @param {Array} listingHints - Listing hints (max 5)
+   * @param {string} language - Language code (ar/en)
+   * @returns {Promise<Object>} AI analysis result
+   */
+  async analyzeSearchResults(userMessage, categoryResults, listingHints, language = 'ar') {
+    try {
+      console.log('🧠 [MCP-ANALYZE] Analyzing search results with AI...');
+      console.log(`📊 [MCP-ANALYZE] Categories: ${categoryResults.length}, Hints: ${listingHints.length}`);
+
+      const isArabic = language === 'ar';
+
+      const systemPrompt = isArabic ? `
+أنت محلل ذكي للبحث في سوق قاسيون.
+
+المهمة: تحليل نتائج البحث واختيار الفئة الأنسب.
+
+# البيانات المتاحة:
+استعلام المستخدم: "${userMessage}"
+
+## نتائج البحث في الفئات (5 نتائج فقط):
+${JSON.stringify(categoryResults, null, 2)}
+
+## أمثلة من الإعلانات (5 نتائج فقط):
+${JSON.stringify(listingHints, null, 2)}
+
+# القواعد الهامة:
+1. اختر الفئة الأكثر تحديداً (leaf category إذا كانت متاحة)
+2. إذا كانت الفئة المختارة لها فئات فرعية (has_children = true)، حدد needs_refinement: true
+3. ⚠️ خاص بالمركبات: الماركات والموديلات هي فئات وليست خصائص
+   مثال: مرسيدس → E-Class → E 300 (كلها categories)
+4. استخدم أمثلة الإعلانات لفهم اللغة العامية
+   مثال: إذا وجدت "طربيزات" في الإعلانات ضمن فئة "طاولات صغيرة" → استخدم هذه الفئة
+
+# استخرج أيضاً:
+- الموقع (المدينة) إن وُجد
+- نوع المعاملة (بيع/إيجار)
+- السعر (حد أدنى/أقصى)
+- أي خصائص محددة
+
+# الرد المطلوب (JSON فقط، بدون شرح):
+{
+  "selectedCategory": {
+    "id": "uuid",
+    "slug": "category-slug",
+    "name": "اسم الفئة",
+    "hasChildren": false,
+    "isLeaf": true
+  },
+  "confidence": 85,
+  "reasoning": "سبب الاختيار",
+  "needsRefinement": false,
+  "extractedFilters": {
+    "cityName": "دمشق",
+    "transactionType": "للبيع",
+    "minPrice": null,
+    "maxPrice": 100000000,
+    "attributes": {
+      "area": "1000",
+      "landType": "صناعية"
+    }
+  }
+}
+` : `
+You are an intelligent search analyzer for Qasioun marketplace.
+
+Task: Analyze search results and select the most appropriate category.
+
+# Available Data:
+User Query: "${userMessage}"
+
+## Category Search Results (5 max):
+${JSON.stringify(categoryResults, null, 2)}
+
+## Listing Examples (5 max):
+${JSON.stringify(listingHints, null, 2)}
+
+# Important Rules:
+1. Choose the most specific category (leaf category if available)
+2. If selected category has children (has_children = true), set needs_refinement: true
+3. ⚠️ For vehicles: Brands and models are categories, NOT attributes
+   Example: Mercedes → E-Class → E 300 (all are categories)
+4. Use listing examples to understand colloquial language
+
+# Also Extract:
+- Location (city) if found
+- Transaction type (sale/rent)
+- Price range (min/max)
+- Any specific attributes
+
+# Required Response (JSON only, no explanation):
+{
+  "selectedCategory": {
+    "id": "uuid",
+    "slug": "category-slug",
+    "name": "Category Name",
+    "hasChildren": false,
+    "isLeaf": true
+  },
+  "confidence": 85,
+  "reasoning": "Reason for selection",
+  "needsRefinement": false,
+  "extractedFilters": {
+    "cityName": "Damascus",
+    "transactionType": "for-sale",
+    "minPrice": null,
+    "maxPrice": 100000000,
+    "attributes": {
+      "area": "1000",
+      "landType": "industrial"
+    }
+  }
+}
+`;
+
+      let aiResponse;
+
+      if (this.provider === 'anthropic' && this.anthropic) {
+        console.log('🔵 [MCP-ANALYZE] Using Anthropic Claude...');
+
+        const model = modelManager.getModel('extract_params', 'anthropic');
+        const maxTokens = modelManager.getMaxTokens('extract_params');
+
+        const response = await this.anthropic.messages.create({
+          model: model,
+          max_tokens: maxTokens,
+          messages: [
+            {
+              role: 'user',
+              content: systemPrompt
+            }
+          ]
+        });
+
+        aiResponse = response.content[0].text;
+
+      } else if (this.openai) {
+        console.log('🟢 [MCP-ANALYZE] Using OpenAI GPT...');
+
+        const model = modelManager.getModel('extract_params', 'openai');
+
+        const response = await this.openai.chat.completions.create({
+          model: model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage }
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.3
+        });
+
+        aiResponse = response.choices[0].message.content;
+
+      } else {
+        throw new Error('No AI provider configured');
+      }
+
+      console.log('✅ [MCP-ANALYZE] AI analysis complete');
+
+      const analysis = JSON.parse(aiResponse);
+      console.log('📊 [MCP-ANALYZE] Result:', JSON.stringify(analysis, null, 2));
+
+      return analysis;
+
+    } catch (error) {
+      console.error('❌ [MCP-ANALYZE] Error:', error.message);
+      logger.error('Error analyzing search results:', error);
+
+      // Fallback: return first category if available
+      if (categoryResults.length > 0) {
+        return {
+          selectedCategory: {
+            id: categoryResults[0].id,
+            slug: categoryResults[0].slug,
+            name: categoryResults[0].name,
+            hasChildren: categoryResults[0].hasChildren,
+            isLeaf: !categoryResults[0].hasChildren
+          },
+          confidence: 50,
+          reasoning: 'Fallback to first category due to AI analysis error',
+          needsRefinement: categoryResults[0].hasChildren,
+          extractedFilters: {}
+        };
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * 🆕 Main intelligent marketplace search with direct database access
+   * المنطق الرئيسي للبحث الذكي مع الوصول المباشر لقاعدة البيانات
+   *
+   * @param {string} userMessage - User message
+   * @param {string} language - Language code (ar/en)
+   * @returns {Promise<Object>} Search result with type and data
+   */
+  async intelligentMarketplaceSearch(userMessage, language = 'ar') {
+    try {
+      console.log('🚀 [MCP-AGENT] Starting intelligent database search...');
+      console.log(`📝 [MCP-AGENT] User query: ${userMessage}`);
+
+      // Step 1: Extract keywords
+      const keywords = this.extractKeywords(userMessage, language);
+      console.log(`🔑 [MCP-AGENT] Keywords:`, keywords);
+
+      if (keywords.length === 0) {
+        return {
+          type: 'error',
+          message: language === 'ar'
+            ? 'عذراً، لم أستطع فهم طلبك. يرجى إعادة الصياغة.'
+            : 'Sorry, I couldn\'t understand your request. Please rephrase.'
+        };
+      }
+
+      // Step 2: Search categories directly (LIMIT 5)
+      const mainKeyword = keywords[0];
+      const categoryResults = await this.searchCategoriesDirectly(mainKeyword, language);
+
+      // Step 3: Search listings for hints (LIMIT 5)
+      const listingHints = await this.searchListingsForHints(mainKeyword, language);
+
+      if (categoryResults.length === 0 && listingHints.length === 0) {
+        return {
+          type: 'no_results',
+          message: language === 'ar'
+            ? `عذراً، لم أجد أي نتائج لـ "${mainKeyword}". جرب كلمة مفتاحية أخرى.`
+            : `Sorry, no results found for "${mainKeyword}". Try another keyword.`
+        };
+      }
+
+      // Step 4: Analyze results with AI (minimal context!)
+      const analysis = await this.analyzeSearchResults(
+        userMessage,
+        categoryResults,
+        listingHints,
+        language
+      );
+
+      console.log('🧠 [MCP-AGENT] AI Analysis:', analysis);
+
+      // Step 5: Process analysis result
+
+      // Case 1: Category has children → ask user to refine
+      if (analysis.needsRefinement && analysis.selectedCategory.hasChildren) {
+        const children = await this.getCategoryChildren(
+          analysis.selectedCategory.id,
+          language
+        );
+
+        return {
+          type: 'clarification_needed',
+          category: analysis.selectedCategory,
+          message: language === 'ar'
+            ? `وجدت فئة "${analysis.selectedCategory.name}"، أي نوع تحديداً؟`
+            : `Found category "${analysis.selectedCategory.name}", which type specifically?`,
+          options: children.map(c => ({ slug: c.slug, name: c.name })),
+          reasoning: analysis.reasoning
+        };
+      }
+
+      // Case 2: Clear category → execute search directly
+      if (analysis.confidence >= 70 && !analysis.selectedCategory.hasChildren) {
+        const searchParams = {
+          categorySlug: analysis.selectedCategory.slug,
+          cityName: analysis.extractedFilters.cityName,
+          transactionType: analysis.extractedFilters.transactionType,
+          minPrice: analysis.extractedFilters.minPrice,
+          maxPrice: analysis.extractedFilters.maxPrice,
+          attributes: analysis.extractedFilters.attributes || {}
+        };
+
+        const listings = await this.executeListingSearch(searchParams, language);
+
+        return {
+          type: 'search_results',
+          category: analysis.selectedCategory,
+          listings: listings,
+          totalResults: listings.length,
+          appliedFilters: searchParams,
+          reasoning: analysis.reasoning
+        };
+      }
+
+      // Case 3: Low confidence → ask user
+      return {
+        type: 'clarification_needed',
+        message: language === 'ar'
+          ? 'لم أفهم تماماً ما تبحث عنه. هل تقصد أحد هذه الخيارات؟'
+          : 'I didn\'t fully understand what you\'re looking for. Did you mean one of these options?',
+        options: categoryResults.slice(0, 3).map(c => ({ slug: c.slug, name: c.name })),
+        reasoning: analysis.reasoning
+      };
+
+    } catch (error) {
+      console.error('❌ [MCP-AGENT] Error in intelligent search:', error.message);
+      logger.error('Error in intelligent marketplace search:', error);
+
+      return {
+        type: 'error',
+        message: language === 'ar'
+          ? 'عذراً، حدث خطأ أثناء البحث. يرجى المحاولة مرة أخرى.'
+          : 'Sorry, an error occurred during search. Please try again.',
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 🆕 Special handling for vehicle searches
+   * معالجة خاصة للمركبات والدراجات النارية
+   *
+   * @param {string} userMessage - User message
+   * @param {string} language - Language code (ar/en)
+   * @returns {Promise<Object|null>} Vehicle search result or null
+   */
+  async handleVehicleSearch(userMessage, language = 'ar') {
+    try {
+      console.log('🚗 [MCP-VEHICLE] Checking if vehicle search...');
+
+      // Vehicle keywords
+      const vehicleKeywords = ['سيارة', 'سيارات', 'مركبة', 'دراجة', 'موتور', 'car', 'vehicle', 'motorcycle'];
+      const hasVehicleKeyword = vehicleKeywords.some(kw => userMessage.toLowerCase().includes(kw));
+
+      if (!hasVehicleKeyword) {
+        console.log('❌ [MCP-VEHICLE] Not a vehicle search');
+        return null;
+      }
+
+      console.log('✅ [MCP-VEHICLE] This is a vehicle search');
+
+      // Extract brand name (simple pattern matching)
+      // TODO: Enhance with AI if needed
+      const words = userMessage.split(/\s+/);
+      const brandKeyword = words.find(word =>
+        word.length > 3 && !vehicleKeywords.includes(word.toLowerCase())
+      );
+
+      if (!brandKeyword) {
+        console.log('ℹ️ [MCP-VEHICLE] No brand keyword found');
+        return null;
+      }
+
+      console.log(`🔍 [MCP-VEHICLE] Searching for brand: ${brandKeyword}`);
+
+      const mcp = require('../mcp');
+      const nameField = language === 'ar' ? 'name_ar' : 'name_en';
+
+      // Search for brand in categories under vehicles
+      const query = `
+        SELECT
+          id,
+          slug,
+          ${nameField} as name,
+          parent_id,
+          level,
+          path,
+          (SELECT COUNT(*) FROM categories c2 WHERE c2.parent_id = categories.id AND c2.is_active = true) > 0 as has_children
+        FROM categories
+        WHERE
+          is_active = true
+          AND path LIKE 'vehicles/%'
+          AND ${nameField} ILIKE $1
+        LIMIT 5
+      `;
+
+      const result = await mcp.client.query(query, [`%${brandKeyword}%`]);
+
+      if (result.rows.length === 0) {
+        console.log('❌ [MCP-VEHICLE] Brand not found');
+        return null;
+      }
+
+      const brandCategory = result.rows[0];
+      console.log(`✅ [MCP-VEHICLE] Found brand: ${brandCategory.name}`);
+
+      // If brand has models (children), ask user
+      if (brandCategory.has_children) {
+        const models = await this.getCategoryChildren(brandCategory.id, language);
+
+        return {
+          type: 'clarification_needed',
+          category: {
+            id: brandCategory.id,
+            slug: brandCategory.slug,
+            name: brandCategory.name,
+            hasChildren: true
+          },
+          message: language === 'ar'
+            ? `وجدت ${brandCategory.name}، أي موديل تحديداً؟`
+            : `Found ${brandCategory.name}, which model specifically?`,
+          options: models.map(m => ({ slug: m.slug, name: m.name })),
+          categoryPath: brandCategory.path
+        };
+      }
+
+      return {
+        category: {
+          id: brandCategory.id,
+          slug: brandCategory.slug,
+          name: brandCategory.name,
+          hasChildren: false
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ [MCP-VEHICLE] Error:', error.message);
+      logger.error('Error in vehicle search handling:', error);
+      return null;
+    }
+  }
+
+  // =========================================================================
+  // 🆕 RESPONSE FORMATTING METHODS
+  // =========================================================================
+
+  /**
+   * 🆕 Format clarification message (when user needs to choose)
+   * تنسيق رسالة التوضيح عندما يحتاج المستخدم للاختيار
+   *
+   * @param {Object} result - Clarification result
+   * @param {string} language - Language code (ar/en)
+   * @returns {string} Formatted message
+   */
+  formatClarificationMessage(result, language = 'ar') {
+    console.log('💬 [MCP-FORMAT] Formatting clarification message...');
+
+    const isArabic = language === 'ar';
+    let message = result.message + '\n\n';
+
+    if (result.options && result.options.length > 0) {
+      message += isArabic ? '🔹 الخيارات المتاحة:\n' : '🔹 Available options:\n';
+
+      result.options.forEach((option, index) => {
+        message += `${index + 1}. ${option.name}\n`;
+      });
+
+      message += '\n';
+      message += isArabic
+        ? '💡 اختر رقم الخيار أو اكتب اسمه'
+        : '💡 Choose the option number or write its name';
+    }
+
+    if (result.reasoning) {
+      console.log(`📝 [MCP-FORMAT] Reasoning: ${result.reasoning}`);
+    }
+
+    return message;
+  }
+
+  /**
+   * 🆕 Format search results message
+   * تنسيق رسالة نتائج البحث
+   *
+   * @param {Object} result - Search result
+   * @param {string} language - Language code (ar/en)
+   * @returns {Promise<string>} Formatted message
+   */
+  async formatSearchResultsMessage(result, language = 'ar') {
+    console.log('💬 [MCP-FORMAT] Formatting search results...');
+
+    const isArabic = language === 'ar';
+    const { listings, totalResults, category, appliedFilters } = result;
+
+    if (listings.length === 0) {
+      return isArabic
+        ? '😔 لم أجد أي نتائج تطابق معايير البحث. جرب معايير أخرى.'
+        : '😔 No results found matching your criteria. Try different criteria.';
+    }
+
+    // Build header
+    let message = isArabic
+      ? `✅ وجدت ${totalResults} نتيجة في فئة "${category.name}"\n\n`
+      : `✅ Found ${totalResults} results in category "${category.name}"\n\n`;
+
+    // Add applied filters summary
+    if (appliedFilters) {
+      const filters = [];
+      if (appliedFilters.cityName) filters.push(isArabic ? `📍 ${appliedFilters.cityName}` : `📍 ${appliedFilters.cityName}`);
+      if (appliedFilters.transactionType) filters.push(isArabic ? `🏷️ ${appliedFilters.transactionType}` : `🏷️ ${appliedFilters.transactionType}`);
+      if (appliedFilters.minPrice || appliedFilters.maxPrice) {
+        const priceRange = [appliedFilters.minPrice, appliedFilters.maxPrice].filter(Boolean).join(' - ');
+        filters.push(isArabic ? `💰 السعر: ${priceRange}` : `💰 Price: ${priceRange}`);
+      }
+
+      if (filters.length > 0) {
+        message += isArabic ? '🔍 الفلاتر المطبقة: ' : '🔍 Applied filters: ';
+        message += filters.join(', ') + '\n\n';
+      }
+    }
+
+    // Format each listing (show first 5-7 only)
+    const displayLimit = 7;
+    const listingsToShow = listings.slice(0, displayLimit);
+
+    message += isArabic ? '📋 النتائج:\n\n' : '📋 Results:\n\n';
+
+    listingsToShow.forEach((listing, index) => {
+      message += `${index + 1}. ${listing.title}\n`;
+
+      if (listing.price) {
+        message += isArabic
+          ? `   💰 السعر: ${listing.price.toLocaleString()} ل.س\n`
+          : `   💰 Price: ${listing.price.toLocaleString()} SYP\n`;
+      }
+
+      if (listing.cityName) {
+        message += `   📍 ${listing.cityName}${listing.province ? `, ${listing.province}` : ''}\n`;
+      }
+
+      if (listing.transactionType) {
+        message += `   🏷️ ${listing.transactionType}\n`;
+      }
+
+      if (listing.listingUrl) {
+        message += `   🔗 ${listing.listingUrl}\n`;
+      }
+
+      message += '\n';
+    });
+
+    // Add footer if there are more results
+    if (totalResults > displayLimit) {
+      const remaining = totalResults - displayLimit;
+      message += isArabic
+        ? `\n💡 يوجد ${remaining} نتيجة إضافية. قم بزيارة الموقع للمزيد: https://www.kasioon.com`
+        : `\n💡 There are ${remaining} more results. Visit the website for more: https://www.kasioon.com`;
+    }
+
+    if (result.reasoning) {
+      console.log(`📝 [MCP-FORMAT] Reasoning: ${result.reasoning}`);
+    }
+
+    return message;
+  }
+
+  /**
+   * 🆕 Format error message
+   * تنسيق رسالة الخطأ
+   *
+   * @param {string} language - Language code (ar/en)
+   * @param {string} errorDetails - Optional error details
+   * @returns {string} Formatted error message
+   */
+  formatErrorMessage(language = 'ar', errorDetails = null) {
+    console.log('❌ [MCP-FORMAT] Formatting error message...');
+
+    const isArabic = language === 'ar';
+
+    let message = isArabic
+      ? '😔 عذراً، حدث خطأ أثناء البحث.\n\n'
+      : '😔 Sorry, an error occurred during search.\n\n';
+
+    message += isArabic
+      ? '💡 جرب:\n'
+      : '💡 Try:\n';
+
+    message += isArabic
+      ? '• إعادة صياغة طلبك\n'
+      : '• Rephrasing your request\n';
+
+    message += isArabic
+      ? '• استخدام كلمات مفتاحية أوضح\n'
+      : '• Using clearer keywords\n';
+
+    message += isArabic
+      ? '• البحث عن فئة عامة أولاً\n'
+      : '• Searching for a general category first\n';
+
+    if (errorDetails) {
+      console.log(`⚠️ [MCP-FORMAT] Error details: ${errorDetails}`);
+    }
+
+    return message;
+  }
+
+  /**
+   * 🆕 Format no results message
+   * تنسيق رسالة عدم وجود نتائج
+   *
+   * @param {string} keyword - Search keyword
+   * @param {string} language - Language code (ar/en)
+   * @returns {string} Formatted message
+   */
+  formatNoResultsMessage(keyword, language = 'ar') {
+    console.log('🔍 [MCP-FORMAT] Formatting no results message...');
+
+    const isArabic = language === 'ar';
+
+    let message = isArabic
+      ? `😔 لم أجد أي نتائج لـ "${keyword}"\n\n`
+      : `😔 No results found for "${keyword}"\n\n`;
+
+    message += isArabic
+      ? '💡 نصائح للبحث:\n'
+      : '💡 Search tips:\n';
+
+    message += isArabic
+      ? '• جرب كلمة مفتاحية مختلفة\n'
+      : '• Try a different keyword\n';
+
+    message += isArabic
+      ? '• استخدم كلمات أقل تحديداً\n'
+      : '• Use less specific words\n';
+
+    message += isArabic
+      ? '• تأكد من الإملاء الصحيح\n'
+      : '• Check spelling\n';
+
+    message += '\n';
+    message += isArabic
+      ? '🔍 أو يمكنك تصفح الفئات الرئيسية على: https://www.kasioon.com'
+      : '🔍 Or browse main categories at: https://www.kasioon.com';
+
+    return message;
+  }
 }
 
 module.exports = new AIAgent();
