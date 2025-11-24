@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const marketplaceSearch = require('../services/search/marketplaceSearch');
+// OPTIMIZED: Using direct database queries instead of API calls
+const directSearch = require('../services/db/directSearch');
 const aiAgent = require('../services/ai/agent');
 const logger = require('../utils/logger');
 
@@ -14,12 +15,15 @@ const asyncHandler = (fn, context) => (req, res, next) => {
   });
 };
 
-// Search marketplace listings
+// Search marketplace listings - OPTIMIZED with direct database queries
 router.post('/search', asyncHandler(async (req, res) => {
   const params = req.body;
   logger.info('API search request:', params);
-  const results = await marketplaceSearch.search(params);
-  res.json({ success: true, count: results.length, results });
+  const startTime = Date.now();
+  const results = await directSearch.search(params);
+  const duration = Date.now() - startTime;
+  logger.info(`Search completed in ${duration}ms, found ${results.length} results`);
+  res.json({ success: true, count: results.length, results, responseTime: duration });
 }, 'API search'));
 
 // Analyze message
@@ -32,17 +36,23 @@ router.post('/analyze', asyncHandler(async (req, res) => {
   res.json({ success: true, params });
 }, 'analyze message'));
 
-// Get listing details
+// Get listing details - OPTIMIZED with direct database query
 router.get('/listings/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const listing = await marketplaceSearch.getListingDetails(id);
-  res.json({ success: true, listing });
+  const startTime = Date.now();
+  const listing = await directSearch.getListingDetails(id);
+  const duration = Date.now() - startTime;
+  logger.info(`Listing details fetched in ${duration}ms`);
+  res.json({ success: true, listing, responseTime: duration });
 }, 'fetch listing details'));
 
-// Get marketplace categories
+// Get marketplace categories - OPTIMIZED with direct database query
 router.get('/categories', asyncHandler(async (req, res) => {
-  const categories = await marketplaceSearch.getCategories();
-  res.json({ success: true, categories });
+  const startTime = Date.now();
+  const categories = await directSearch.getCategories();
+  const duration = Date.now() - startTime;
+  logger.info(`Categories fetched in ${duration}ms`);
+  res.json({ success: true, categories, responseTime: duration });
 }, 'fetch categories'));
 
 module.exports = router;
