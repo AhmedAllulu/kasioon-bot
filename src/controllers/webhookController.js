@@ -1,14 +1,9 @@
-const searchService = require('../services/search/SearchService');
-const whisperService = require('../services/ai/WhisperService');
-const telegramFormatter = require('../services/messaging/TelegramFormatter');
-const whatsAppFormatter = require('../services/messaging/WhatsAppFormatter');
-const responseFormatter = require('../utils/responseFormatter');
 const { asyncHandler } = require('../utils/errorHandler');
 const logger = require('../utils/logger');
 
 /**
  * Webhook Controller
- * Handles Telegram and WhatsApp webhooks from n8n
+ * Placeholder for future webhook integrations
  */
 
 /**
@@ -16,75 +11,13 @@ const logger = require('../utils/logger');
  * POST /api/webhooks/telegram
  */
 exports.telegram = asyncHandler(async (req, res) => {
-  const {
-    chatId,
-    userId,
-    username,
-    messageType = 'text',
-    text,
-    voiceFileId,
-    language = 'ar'
-  } = req.body;
+  logger.info('Telegram webhook received', { body: req.body });
 
-  logger.info('Telegram webhook received', {
-    chatId,
-    userId,
-    messageType,
-    text: text?.substring(0, 50)
+  // TODO: Implement Telegram webhook handling
+  res.status(200).json({
+    success: true,
+    message: 'Telegram webhook endpoint ready for implementation'
   });
-
-  try {
-    let searchQuery = text;
-
-    // Handle voice messages
-    if (messageType === 'voice' && voiceFileId) {
-      // In production, you would download the voice file from Telegram
-      // For now, we'll just return an error
-      return res.json(
-        responseFormatter.success({
-          reply: telegramFormatter.formatError(
-            'دعم الرسائل الصوتية قيد التطوير حالياً',
-            language
-          )
-        })
-      );
-    }
-
-    if (!searchQuery) {
-      return res.json(
-        responseFormatter.success({
-          reply: telegramFormatter.formatError(
-            'الرجاء إرسال نص البحث',
-            language
-          )
-        })
-      );
-    }
-
-    // Perform search
-    const results = await searchService.search({
-      query: searchQuery,
-      language,
-      source: 'telegram',
-      userId,
-      page: 1,
-      limit: 10
-    });
-
-    // Format for Telegram
-    const reply = telegramFormatter.formatSearchResults(results, language);
-
-    res.json(responseFormatter.success({ reply }));
-  } catch (error) {
-    logger.error('Telegram webhook error:', error);
-
-    const reply = telegramFormatter.formatError(
-      error.message || 'حدث خطأ أثناء البحث',
-      language
-    );
-
-    res.json(responseFormatter.success({ reply }));
-  }
 });
 
 /**
@@ -92,72 +25,13 @@ exports.telegram = asyncHandler(async (req, res) => {
  * POST /api/webhooks/whatsapp
  */
 exports.whatsapp = asyncHandler(async (req, res) => {
-  const {
-    from,
-    messageType = 'text',
-    text,
-    audioUrl,
-    timestamp,
-    language = 'ar'
-  } = req.body;
+  logger.info('WhatsApp webhook received', { body: req.body });
 
-  logger.info('WhatsApp webhook received', {
-    from,
-    messageType,
-    text: text?.substring(0, 50)
+  // TODO: Implement WhatsApp webhook handling
+  res.status(200).json({
+    success: true,
+    message: 'WhatsApp webhook endpoint ready for implementation'
   });
-
-  try {
-    let searchQuery = text;
-
-    // Handle audio messages
-    if (messageType === 'audio' && audioUrl) {
-      // In production, you would download and transcribe the audio
-      return res.json(
-        responseFormatter.success({
-          reply: whatsAppFormatter.formatError(
-            'دعم الرسائل الصوتية قيد التطوير حالياً',
-            language
-          )
-        })
-      );
-    }
-
-    if (!searchQuery) {
-      return res.json(
-        responseFormatter.success({
-          reply: whatsAppFormatter.formatError(
-            'الرجاء إرسال نص البحث',
-            language
-          )
-        })
-      );
-    }
-
-    // Perform search
-    const results = await searchService.search({
-      query: searchQuery,
-      language,
-      source: 'whatsapp',
-      userId: from,
-      page: 1,
-      limit: 10
-    });
-
-    // Format for WhatsApp
-    const reply = whatsAppFormatter.formatSearchResults(results, language);
-
-    res.json(responseFormatter.success({ reply }));
-  } catch (error) {
-    logger.error('WhatsApp webhook error:', error);
-
-    const reply = whatsAppFormatter.formatError(
-      error.message || 'حدث خطأ أثناء البحث',
-      language
-    );
-
-    res.json(responseFormatter.success({ reply }));
-  }
 });
 
 /**

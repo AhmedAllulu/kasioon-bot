@@ -9,6 +9,40 @@ class CacheService {
   }
 
   /**
+   * Generic get from cache
+   * @param {string} key - Cache key
+   * @returns {Promise<any|null>} Cached value
+   */
+  async get(key) {
+    if (!this.enabled) return null;
+
+    try {
+      const cached = await this.redis.get(key);
+      return cached;
+    } catch (error) {
+      logger.error('Cache get error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Generic set to cache
+   * @param {string} key - Cache key
+   * @param {any} value - Value to cache
+   * @param {number} ttl - TTL in seconds
+   */
+  async set(key, value, ttl = null) {
+    if (!this.enabled) return;
+
+    try {
+      const cacheTTL = ttl || this.redis.getTTL('search');
+      await this.redis.set(key, value, cacheTTL);
+    } catch (error) {
+      logger.error('Cache set error:', error);
+    }
+  }
+
+  /**
    * Get search results from cache
    * @param {Object} searchParams - Search parameters
    * @returns {Promise<Object|null>} Cached results
@@ -18,7 +52,7 @@ class CacheService {
 
     try {
       const cacheKey = this.generateSearchKey(searchParams);
-      const cached = await this.redis.get(cacheKey);
+      const cached = await this.get(cacheKey);
 
       if (cached) {
         logger.debug('Search cache hit', { params: searchParams });
@@ -43,10 +77,8 @@ class CacheService {
 
     try {
       const cacheKey = this.generateSearchKey(searchParams);
-      const cacheTTL = ttl || this.redis.getTTL('search');
-
-      await this.redis.set(cacheKey, results, cacheTTL);
-      logger.debug('Search results cached', { params: searchParams, ttl: cacheTTL });
+      await this.set(cacheKey, results, ttl);
+      logger.debug('Search results cached', { params: searchParams, ttl });
     } catch (error) {
       logger.error('Cache set error:', error);
     }

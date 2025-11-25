@@ -82,7 +82,8 @@ class OpenAIService {
       const response = await this.client.embeddings.create({
         model: this.models.embedding,
         input: texts,
-        encoding_format: 'float'
+        encoding_format: 'float',
+        dimensions: 1536 // Reduced from 3072 for pgvector compatibility
       });
 
       const embeddings = response.data.map(item => item.embedding);

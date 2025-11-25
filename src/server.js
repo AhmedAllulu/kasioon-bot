@@ -96,6 +96,12 @@ async function startServer() {
     logger.info('Initializing OpenAI client...');
     openAIConfig.initialize();
 
+    // Initialize MCP Agent with hot cache
+    logger.info('Initializing MCP Agent...');
+    const mcpAgent = require('./services/mcp/MCPAgent');
+    await mcpAgent.initialize();
+    logger.info('MCP Agent initialized with database hot cache');
+
     // Create uploads directory if it doesn't exist
     const fs = require('fs');
     const path = require('path');

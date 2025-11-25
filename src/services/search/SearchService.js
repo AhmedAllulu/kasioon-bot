@@ -109,8 +109,10 @@ class SearchService {
         responseFormatter.formatListing(listing, language)
       );
 
-      // Generate suggestions
-      const suggestions = this.mcp.generateSuggestions(parsed);
+      // Generate suggestions (if method exists)
+      const suggestions = typeof this.mcp.generateSuggestions === 'function'
+        ? this.mcp.generateSuggestions(parsed)
+        : [];
 
       // Build response
       const response = responseFormatter.searchResults(
