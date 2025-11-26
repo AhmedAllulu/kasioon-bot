@@ -1,7 +1,9 @@
 const { Telegraf, Markup } = require('telegraf');
 const searchService = require('../search/SearchService');
+const intentService = require('../intent/IntentService');
 const TelegramFormatter = require('./TelegramFormatter');
 const whisperService = require('../ai/WhisperService');
+const openAIService = require('../ai/OpenAIService');
 const logger = require('../../utils/logger');
 const axios = require('axios');
 const fs = require('fs').promises;
@@ -123,13 +125,13 @@ class TelegramBot {
    * Handle text messages (search queries)
    */
   async handleTextMessage(ctx) {
-    const query = ctx.message.text;
+    const rawText = ctx.message.text;
     const userId = ctx.from.id;
     const language = 'ar'; // Default to Arabic
 
     logger.info('Telegram search request', {
       userId,
-      query: query.substring(0, 50),
+      rawText: rawText.substring(0, 50),
       username: ctx.from.username
     });
 
@@ -137,25 +139,117 @@ class TelegramBot {
     await ctx.sendChatAction('typing');
 
     try {
-      // Perform search
-      const results = await searchService.search({
-        query,
-        language,
-        source: 'telegram',
-        userId: userId.toString(),
-        page: 1,
-        limit: 10
+      // Detect user intent
+      const intent = await openAIService.detectIntent(rawText, language);
+
+      logger.info('Telegram intent detected', {
+        userId,
+        original: rawText.substring(0, 50),
+        intent: intent.intent
       });
 
-      // Format results for Telegram
-      const formatted = TelegramFormatter.formatSearchResults(results, language);
+      // Route based on intent
+      let results;
+      let formatted;
 
-      // Send response
-      await this.sendFormattedMessage(ctx, formatted);
+      switch (intent.intent) {
+        case 'search':
+          if (!intent.query) {
+            await ctx.reply('أهلاً! 👋\nشو بدك دور عليه؟\nاكتبلي شو عم تدور عليه وأنا بساعدك 🔍');
+            return;
+          }
+
+          // Perform search with cleaned query
+          results = await searchService.search({
+            query: intent.query,
+            language,
+            source: 'telegram',
+            userId: userId.toString(),
+            page: 1,
+            limit: 10
+          });
+
+          // Format results for Telegram
+          formatted = TelegramFormatter.formatSearchResults(results, language);
+          await this.sendFormattedMessage(ctx, formatted);
+          break;
+
+        case 'most_viewed':
+          results = await intentService.getMostViewedListings(intent.limit || 10, language);
+          formatted = TelegramFormatter.formatListings(
+            results.data,
+            language,
+            '📊 الإعلانات الأكثر مشاهدة'
+          );
+          await this.sendFormattedMessage(ctx, formatted);
+          break;
+
+        case 'most_impressioned':
+          results = await intentService.getMostImpressionedListings(intent.limit || 10, language);
+          formatted = TelegramFormatter.formatListings(
+            results.data,
+            language,
+            '🔥 الإعلانات الأكثر تفاعلاً'
+          );
+          await this.sendFormattedMessage(ctx, formatted);
+          break;
+
+        case 'get_offices':
+          results = await intentService.getOffices(intent.limit || 20, language);
+          formatted = TelegramFormatter.formatOffices(results.data, language);
+          await this.sendFormattedMessage(ctx, formatted);
+          break;
+
+        case 'get_office_details':
+          if (!intent.officeId) {
+            await ctx.reply('يرجى تحديد رقم أو اسم المكتب 🏢\nمثال: "تفاصيل المكتب رقم 123"');
+            return;
+          }
+          results = await intentService.getOfficeDetails(intent.officeId, language);
+          if (!results.success) {
+            await ctx.reply(results.error);
+            return;
+          }
+          formatted = TelegramFormatter.formatOfficeDetails(results.data, language);
+          await this.sendFormattedMessage(ctx, formatted);
+          break;
+
+        case 'get_office_listings':
+          if (!intent.officeId) {
+            await ctx.reply('يرجى تحديد رقم أو اسم المكتب 🏢\nمثال: "إعلانات المكتب رقم 123"');
+            return;
+          }
+          results = await intentService.getOfficeListings(intent.officeId, intent.limit || 10, language);
+          if (!results.success) {
+            await ctx.reply(results.error);
+            return;
+          }
+          formatted = TelegramFormatter.formatListings(
+            results.data,
+            language,
+            `🏢 إعلانات ${results.office.name}`
+          );
+          await this.sendFormattedMessage(ctx, formatted);
+          break;
+
+        case 'greeting':
+          results = intentService.getGreetingMessage(language);
+          await ctx.reply(results.message);
+          break;
+
+        case 'help':
+          results = intentService.getHelpMessage(language);
+          await ctx.reply(results.message);
+          break;
+
+        default:
+          await ctx.reply('عذراً، ما فهمت طلبك 😔\nاكتب /help لمعرفة شو بقدر ساعدك');
+          break;
+      }
     } catch (error) {
-      logger.error('Telegram search error:', error);
+      logger.error('Telegram message handler error:', error);
       const errorMessage = TelegramFormatter.formatError(
-        'عذراً، صار في مشكلة بالبحث 😔\nجرب مرة تانية أو غير كلمات البحث',
+        'عذراً، صار في مشكلة 😔\nجرب مرة تانية أو اكتب /help للمساعدة',
         language
       );
       await this.sendFormattedMessage(ctx, errorMessage);
@@ -204,24 +298,117 @@ class TelegramBot {
         text: transcribedText.substring(0, 100)
       });
 
-      // Send transcription to user
-      await ctx.reply(`📝 سمعتك: "${transcribedText}"\n\n🔍 عم دور...`);
+      // Detect user intent from transcribed text
+      const intent = await openAIService.detectIntent(transcribedText, language);
 
-      // Process as search query
-      const results = await searchService.search({
-        query: transcribedText,
-        language,
-        source: 'telegram-voice',
-        userId: userId.toString(),
-        page: 1,
-        limit: 10
+      logger.info('Voice intent detected', {
+        userId,
+        original: transcribedText.substring(0, 50),
+        intent: intent.intent
       });
 
-      // Format results for Telegram
-      const formatted = TelegramFormatter.formatSearchResults(results, language);
+      // Send transcription to user
+      await ctx.reply(`📝 سمعتك: "${transcribedText}"`);
 
-      // Send response
-      await this.sendFormattedMessage(ctx, formatted);
+      // Route based on intent
+      let results;
+      let formatted;
+
+      switch (intent.intent) {
+        case 'search':
+          if (!intent.query) {
+            await ctx.reply('بس ما فهمت شو بدك دور عليه 🤔\nممكن تحكيلي شو عم تدور عليه؟');
+            return;
+          }
+
+          await ctx.reply(`🔍 عم دور على: "${intent.query}"`);
+
+          // Process as search query
+          results = await searchService.search({
+            query: intent.query,
+            language,
+            source: 'telegram-voice',
+            userId: userId.toString(),
+            page: 1,
+            limit: 10
+          });
+
+          formatted = TelegramFormatter.formatSearchResults(results, language);
+          await this.sendFormattedMessage(ctx, formatted);
+          break;
+
+        case 'most_viewed':
+          results = await intentService.getMostViewedListings(intent.limit || 10, language);
+          formatted = TelegramFormatter.formatListings(
+            results.data,
+            language,
+            '📊 الإعلانات الأكثر مشاهدة'
+          );
+          await this.sendFormattedMessage(ctx, formatted);
+          break;
+
+        case 'most_impressioned':
+          results = await intentService.getMostImpressionedListings(intent.limit || 10, language);
+          formatted = TelegramFormatter.formatListings(
+            results.data,
+            language,
+            '🔥 الإعلانات الأكثر تفاعلاً'
+          );
+          await this.sendFormattedMessage(ctx, formatted);
+          break;
+
+        case 'get_offices':
+          results = await intentService.getOffices(intent.limit || 20, language);
+          formatted = TelegramFormatter.formatOffices(results.data, language);
+          await this.sendFormattedMessage(ctx, formatted);
+          break;
+
+        case 'get_office_details':
+          if (!intent.officeId) {
+            await ctx.reply('يرجى تحديد رقم أو اسم المكتب 🏢');
+            return;
+          }
+          results = await intentService.getOfficeDetails(intent.officeId, language);
+          if (!results.success) {
+            await ctx.reply(results.error);
+            return;
+          }
+          formatted = TelegramFormatter.formatOfficeDetails(results.data, language);
+          await this.sendFormattedMessage(ctx, formatted);
+          break;
+
+        case 'get_office_listings':
+          if (!intent.officeId) {
+            await ctx.reply('يرجى تحديد رقم أو اسم المكتب 🏢');
+            return;
+          }
+          results = await intentService.getOfficeListings(intent.officeId, intent.limit || 10, language);
+          if (!results.success) {
+            await ctx.reply(results.error);
+            return;
+          }
+          formatted = TelegramFormatter.formatListings(
+            results.data,
+            language,
+            `🏢 إعلانات ${results.office.name}`
+          );
+          await this.sendFormattedMessage(ctx, formatted);
+          break;
+
+        case 'greeting':
+          results = intentService.getGreetingMessage(language);
+          await ctx.reply(results.message);
+          break;
+
+        case 'help':
+          results = intentService.getHelpMessage(language);
+          await ctx.reply(results.message);
+          break;
+
+        default:
+          await ctx.reply('عذراً، ما فهمت طلبك 😔');
+          break;
+      }
     } catch (error) {
       logger.error('Voice message processing error:', error);
       await ctx.reply('عذراً، ما قدرت افهم الرسالة الصوتية 😔\nجرب ترسل رسالة نصية أو صوتية تانية');

@@ -213,6 +213,186 @@ class TelegramFormatter {
   }
 
   /**
+   * Format listings with a custom title
+   * @param {Array} listings - Listings array
+   * @param {string} language - Language
+   * @param {string} title - Custom title
+   * @returns {Object} Formatted Telegram response
+   */
+  static formatListings(listings, language = 'ar', title = null) {
+    if (listings.length === 0) {
+      return this.formatNoResults('', language);
+    }
+
+    let text = title ? `${title}\n\n` : '';
+    text += this.buildListings(listings, language);
+
+    return {
+      text,
+      parseMode: 'HTML',
+      buttons: [
+        [{ text: language === 'ar' ? '🔍 بحث جديد' : '🔍 New Search', callback_data: 'new_search' }]
+      ],
+      disableWebPagePreview: false
+    };
+  }
+
+  /**
+   * Format offices list
+   * @param {Array} offices - Offices array
+   * @param {string} language - Language
+   * @returns {Object} Formatted Telegram response
+   */
+  static formatOffices(offices, language = 'ar') {
+    if (offices.length === 0) {
+      const text = language === 'ar'
+        ? '😔 <b>لا توجد مكاتب</b>'
+        : '😔 <b>No Offices Found</b>';
+
+      return {
+        text,
+        parseMode: 'HTML',
+        buttons: []
+      };
+    }
+
+    let text = language === 'ar'
+      ? '🏢 <b>المكاتب العقارية</b>\n\n'
+      : '🏢 <b>Real Estate Offices</b>\n\n';
+
+    const maxOffices = Math.min(offices.length, 10);
+    for (let i = 0; i < maxOffices; i++) {
+      const office = offices[i];
+      const index = i + 1;
+
+      text += `${this.getNumberEmoji(index)} <b>${this.escapeHtml(office.name)}</b>\n`;
+
+      if (office.city) {
+        text += `📍 ${office.city}`;
+        if (office.province) {
+          text += ` - ${office.province}`;
+        }
+        text += '\n';
+      }
+
+      if (office.rating) {
+        const stars = '⭐'.repeat(Math.floor(office.rating));
+        text += `${stars} ${office.rating.toFixed(1)}/5`;
+        if (office.ratingCount) {
+          text += ` (${office.ratingCount})`;
+        }
+        text += '\n';
+      }
+
+      if (office.isPremium) {
+        text += '⭐ مكتب مميز\n';
+      }
+
+      if (office.activeListingsCount) {
+        text += `📊 ${office.activeListingsCount} إعلان نشط\n`;
+      }
+
+      if (office.phone) {
+        text += `📞 ${office.phone}\n`;
+      }
+
+      text += '\n';
+    }
+
+    return {
+      text,
+      parseMode: 'HTML',
+      buttons: [
+        [{ text: language === 'ar' ? '🔍 بحث جديد' : '🔍 New Search', callback_data: 'new_search' }]
+      ],
+      disableWebPagePreview: false
+    };
+  }
+
+  /**
+   * Format office details
+   * @param {Object} office - Office object
+   * @param {string} language - Language
+   * @returns {Object} Formatted Telegram response
+   */
+  static formatOfficeDetails(office, language = 'ar') {
+    let text = `🏢 <b>${this.escapeHtml(office.name)}</b>\n\n`;
+
+    if (office.description) {
+      text += `${this.escapeHtml(office.description)}\n\n`;
+    }
+
+    text += '<b>📋 معلومات التواصل:</b>\n';
+
+    if (office.phone) {
+      const cleanPhone = office.phone.replace(/[^0-9+]/g, '');
+      text += `📞 <a href="tel:${cleanPhone}">${office.phone}</a>\n`;
+      // Add WhatsApp link if phone exists
+      if (cleanPhone) {
+        text += `💬 <a href="https://wa.me/${cleanPhone}">واتساب</a>\n`;
+      }
+    }
+
+    if (office.email) {
+      text += `✉️ ${office.email}\n`;
+    }
+
+    if (office.website) {
+      text += `🌐 <a href="${office.website}">الموقع الإلكتروني</a>\n`;
+    }
+
+    text += '\n<b>📍 الموقع:</b>\n';
+
+    if (office.city) {
+      text += `${office.city}`;
+      if (office.province) {
+        text += ` - ${office.province}`;
+      }
+      text += '\n';
+    }
+
+    if (office.address) {
+      text += `${office.address}\n`;
+    }
+
+    text += '\n<b>📊 إحصائيات:</b>\n';
+
+    if (office.rating) {
+      const stars = '⭐'.repeat(Math.floor(office.rating));
+      text += `التقييم: ${stars} ${office.rating.toFixed(1)}/5`;
+      if (office.ratingCount) {
+        text += ` (${office.ratingCount} تقييم)`;
+      }
+      text += '\n';
+    }
+
+    if (office.isPremium) {
+      text += '⭐ مكتب مميز\n';
+    }
+
+    if (office.propertiesCount !== undefined) {
+      text += `${office.propertiesCount} عقار مسجل\n`;
+    }
+
+    if (office.activeListingsCount !== undefined) {
+      text += `${office.activeListingsCount} إعلان نشط\n`;
+    }
+
+    if (office.totalListingsCount !== undefined) {
+      text += `${office.totalListingsCount} إعلان إجمالي\n`;
+    }
+
+    return {
+      text,
+      parseMode: 'HTML',
+      buttons: [
+        [{ text: language === 'ar' ? '🔍 بحث جديد' : '🔍 New Search', callback_data: 'new_search' }]
+      ],
+      disableWebPagePreview: false
+    };
+  }
+
+  /**
    * Format key attributes
    * @param {Object} attributes - Attributes object
    * @param {string} language - Language

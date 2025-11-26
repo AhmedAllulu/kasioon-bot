@@ -1,5 +1,7 @@
 const searchService = require('../services/search/SearchService');
 const mcpAgent = require('../services/mcp/MCPAgent');
+const openAIService = require('../services/ai/OpenAIService');
+const intentService = require('../services/intent/IntentService');
 const responseFormatter = require('../utils/responseFormatter');
 const { asyncHandler } = require('../utils/errorHandler');
 const logger = require('../utils/logger');
@@ -44,16 +46,109 @@ exports.search = asyncHandler(async (req, res) => {
     );
   }
 
-  // Perform search
-  const results = await searchService.search({
-    query,
-    language,
-    source,
-    userId,
-    page: parseInt(page),
-    limit: parseInt(limit),
-    filters
+  // Detect user intent
+  const intent = await openAIService.detectIntent(query, language);
+
+  logger.info('Intent detected', {
+    original: query.substring(0, 50),
+    intent: intent.intent
   });
+
+  // Route based on intent
+  let results;
+
+  switch (intent.intent) {
+    case 'search':
+      // Perform listing search
+      if (!intent.query) {
+        return res.status(400).json(
+          responseFormatter.error('No search query found in the request', 400)
+        );
+      }
+
+      results = await searchService.search({
+        query: intent.query,
+        language,
+        source,
+        userId,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        filters
+      });
+      break;
+
+    case 'most_viewed':
+      results = await intentService.getMostViewedListings(
+        intent.limit || parseInt(limit),
+        language
+      );
+      break;
+
+    case 'most_impressioned':
+      results = await intentService.getMostImpressionedListings(
+        intent.limit || parseInt(limit),
+        language
+      );
+      break;
+
+    case 'get_offices':
+      results = await intentService.getOffices(
+        intent.limit || parseInt(limit),
+        language
+      );
+      break;
+
+    case 'get_office_details':
+      if (!intent.officeId) {
+        return res.status(400).json(
+          responseFormatter.error(
+            language === 'ar'
+              ? 'يرجى تحديد رقم أو اسم المكتب'
+              : 'Please specify office ID or name',
+            400
+          )
+        );
+      }
+      results = await intentService.getOfficeDetails(intent.officeId, language);
+      if (!results.success) {
+        return res.status(404).json(responseFormatter.error(results.error, 404));
+      }
+      break;
+
+    case 'get_office_listings':
+      if (!intent.officeId) {
+        return res.status(400).json(
+          responseFormatter.error(
+            language === 'ar'
+              ? 'يرجى تحديد رقم أو اسم المكتب'
+              : 'Please specify office ID or name',
+            400
+          )
+        );
+      }
+      results = await intentService.getOfficeListings(
+        intent.officeId,
+        intent.limit || parseInt(limit),
+        language
+      );
+      if (!results.success) {
+        return res.status(404).json(responseFormatter.error(results.error, 404));
+      }
+      break;
+
+    case 'greeting':
+      results = intentService.getGreetingMessage(language);
+      break;
+
+    case 'help':
+      results = intentService.getHelpMessage(language);
+      break;
+
+    default:
+      return res.status(400).json(
+        responseFormatter.error('Unknown intent type', 400)
+      );
+  }
 
   res.json(results);
 });
