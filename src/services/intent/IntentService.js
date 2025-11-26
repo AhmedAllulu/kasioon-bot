@@ -215,6 +215,7 @@ class IntentService {
       const formattedOffices = result.rows.map(office => ({
         id: office.id,
         name: office.name,
+        url: `https://www.kasioon.com/office/${office.id}`,
         description: office.description,
         phone: office.phone,
         email: office.email,
@@ -362,6 +363,7 @@ class IntentService {
       const formattedOffice = {
         id: office.id,
         name: office.name,
+        url: `https://www.kasioon.com/office/${office.id}`,
         description: office.description,
         phone: office.phone,
         email: office.email,

@@ -6,10 +6,6 @@ const responseFormatter = require('../utils/responseFormatter');
 const { asyncHandler } = require('../utils/errorHandler');
 const logger = require('../utils/logger');
 
-/**
- * Search Controller
- * Handles search-related endpoints
- */
 
 /**
  * Main search endpoint

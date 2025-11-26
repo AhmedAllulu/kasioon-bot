@@ -296,6 +296,11 @@ class TelegramFormatter {
         text += `📞 ${office.phone}\n`;
       }
 
+      if (office.url || office.id) {
+        const officeUrl = office.url || `https://www.kasioon.com/office/${office.id}`;
+        text += `🔗 <a href="${officeUrl}">صفحة المكتب</a>\n`;
+      }
+
       text += '\n';
     }
 
@@ -317,6 +322,11 @@ class TelegramFormatter {
    */
   static formatOfficeDetails(office, language = 'ar') {
     let text = `🏢 <b>${this.escapeHtml(office.name)}</b>\n\n`;
+
+    if (office.url || office.id) {
+      const officeUrl = office.url || `https://www.kasioon.com/office/${office.id}`;
+      text += `🔗 <a href="${officeUrl}">عرض صفحة المكتب</a>\n\n`;
+    }
 
     if (office.description) {
       text += `${this.escapeHtml(office.description)}\n\n`;
