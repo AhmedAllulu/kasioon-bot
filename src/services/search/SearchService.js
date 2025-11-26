@@ -204,6 +204,11 @@ class SearchService {
         results = await this.smartFallbackSearch(query, searchParams, parsed);
       }
 
+      // Apply location-based sorting if location was specified
+      if (parsed.location && results.length > 0) {
+        results = await this.sortByLocationProximity(results, parsed.location);
+      }
+
       // Apply pagination
       const offset = (page - 1) * limit;
       const total = results.length;
@@ -583,6 +588,83 @@ Answer only (yes/no):`;
     });
 
     return merged;
+  }
+
+  /**
+   * Sort results by location proximity
+   * Prioritizes listings from same city, then same province
+   * @param {Array} results - Search results
+   * @param {Object} searchLocation - Search location object with province info
+   * @returns {Promise<Array>} Sorted results
+   */
+  async sortByLocationProximity(results, searchLocation) {
+    const db = require('../../config/database');
+
+    try {
+      // Get the province of the search location
+      let searchProvince = null;
+      let searchCityName = null;
+
+      if (typeof searchLocation === 'object' && searchLocation.name_ar) {
+        searchCityName = searchLocation.name_ar;
+
+        // Get province from database
+        const provinceQuery = await db.query(
+          'SELECT province_ar, province_en FROM cities WHERE name_ar = $1 OR name_en = $2 LIMIT 1',
+          [searchLocation.name_ar, searchLocation.name_en || searchLocation.name_ar]
+        );
+
+        if (provinceQuery.rows.length > 0) {
+          searchProvince = provinceQuery.rows[0].province_ar;
+          logger.debug('Search province identified', {
+            city: searchCityName,
+            province: searchProvince
+          });
+        }
+      }
+
+      // If no province found, return results as-is
+      if (!searchProvince) {
+        return results;
+      }
+
+      // Sort results by location proximity
+      const sortedResults = results.sort((a, b) => {
+        // Priority 1: Same city (exact match)
+        const aCityMatch = a.city_name_ar === searchCityName ? 3 : 0;
+        const bCityMatch = b.city_name_ar === searchCityName ? 3 : 0;
+
+        if (aCityMatch !== bCityMatch) {
+          return bCityMatch - aCityMatch;
+        }
+
+        // Priority 2: Same province
+        const aProvinceMatch = a.province_ar === searchProvince ? 2 : 0;
+        const bProvinceMatch = b.province_ar === searchProvince ? 2 : 0;
+
+        if (aProvinceMatch !== bProvinceMatch) {
+          return bProvinceMatch - aProvinceMatch;
+        }
+
+        // Priority 3: Original relevance score
+        const scoreA = (a.rank_score || 0) + (a.similarity_score || 0) + (a.is_boosted ? 0.2 : 0);
+        const scoreB = (b.rank_score || 0) + (b.similarity_score || 0) + (b.is_boosted ? 0.2 : 0);
+
+        return scoreB - scoreA;
+      });
+
+      logger.info('Results sorted by location proximity', {
+        totalResults: results.length,
+        searchCity: searchCityName,
+        searchProvince
+      });
+
+      return sortedResults;
+    } catch (error) {
+      logger.error('Location proximity sorting error:', error);
+      // Return original results if sorting fails
+      return results;
+    }
   }
 
   /**

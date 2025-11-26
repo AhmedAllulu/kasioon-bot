@@ -121,7 +121,7 @@ class ResponseFormatter {
       mainImage: listing.main_image_url,
       views: listing.views || 0,
       createdAt: listing.created_at,
-      url: `${process.env.KASIOON_WEBSITE_URL}/listing/${listing.id}`
+      url: `https://www.kasioon.com/listing/${listing.id}`
     };
 
     // Add transaction type if available

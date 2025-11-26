@@ -1,22 +1,30 @@
 const { asyncHandler } = require('../utils/errorHandler');
 const logger = require('../utils/logger');
+const telegramBot = require('../services/messaging/TelegramBot');
 
 /**
  * Webhook Controller
- * Placeholder for future webhook integrations
+ * Handles webhooks from messaging platforms
  */
 
 /**
  * Telegram webhook handler
  * POST /api/webhooks/telegram
+ *
+ * Note: This endpoint is handled by the Telegram bot's webhookCallback middleware
+ * which is set up in the server initialization
  */
 exports.telegram = asyncHandler(async (req, res) => {
-  logger.info('Telegram webhook received', { body: req.body });
+  logger.info('Telegram webhook received', {
+    update_id: req.body.update_id,
+    message: req.body.message?.text?.substring(0, 50)
+  });
 
-  // TODO: Implement Telegram webhook handling
+  // The actual processing is handled by TelegramBot service
+  // This is just a fallback/logging endpoint
   res.status(200).json({
     success: true,
-    message: 'Telegram webhook endpoint ready for implementation'
+    message: 'Telegram webhook processed'
   });
 });
 

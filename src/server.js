@@ -46,6 +46,9 @@ const PORT = process.env.PORT || 3355;
  * Middleware Setup
  */
 
+// Trust proxy (for rate limiting and X-Forwarded-For header behind Apache)
+app.set('trust proxy', true);
+
 // Security
 app.use(helmet({
   contentSecurityPolicy: false,
@@ -65,6 +68,20 @@ app.use(morgan('combined', { stream: logger.stream }));
 
 // Rate limiting
 app.use('/api', apiLimiter);
+
+/**
+ * Telegram Bot Webhook Handler
+ * This needs to be registered BEFORE the API routes to take precedence
+ */
+let telegramWebhookHandler = null;
+
+app.post('/api/webhooks/telegram', (req, res, next) => {
+  if (telegramWebhookHandler) {
+    return telegramWebhookHandler(req, res, next);
+  }
+  // If bot not initialized yet, return 503
+  res.status(503).json({ error: 'Telegram bot not initialized yet' });
+});
 
 /**
  * Routes
@@ -121,6 +138,21 @@ async function startServer() {
     const mcpAgent = require('./services/mcp/MCPAgent');
     await mcpAgent.initialize();
     logger.info('MCP Agent initialized with database hot cache');
+
+    // Initialize Telegram Bot
+    if (process.env.TELEGRAM_BOT_TOKEN) {
+      logger.info('Initializing Telegram Bot...');
+      const telegramBot = require('./services/messaging/TelegramBot');
+      telegramBot.initialize();
+
+      // Set the webhook handler so the route can use it
+      telegramWebhookHandler = telegramBot.getWebhookCallback('/api/webhooks/telegram');
+
+      logger.info('Telegram Bot initialized successfully');
+      logger.info('Telegram webhook handler registered at /api/webhooks/telegram');
+    } else {
+      logger.warn('Telegram Bot Token not found, skipping Telegram integration');
+    }
 
     // Create uploads directory if it doesn't exist
     const uploadsDir = path.join(process.cwd(), 'uploads');

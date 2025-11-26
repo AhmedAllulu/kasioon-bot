@@ -5,10 +5,14 @@ const { validateWebhook } = require('../middleware/validator');
 
 /**
  * @route   POST /api/webhooks/telegram
- * @desc    Telegram webhook from n8n
- * @access  Public (should be secured in production)
+ * @desc    Telegram webhook endpoint
+ * @access  Public (secured by Telegram's validation)
+ *
+ * Note: The Telegram webhook is handled by the TelegramBot service
+ * via the webhookCallback middleware which is registered BEFORE this router in server.js
+ * So this route will never be reached for Telegram webhooks - it's here for documentation only
  */
-router.post('/telegram', validateWebhook, webhookController.telegram);
+// Telegram route is handled by Telegraf middleware in server.js, not here
 
 /**
  * @route   POST /api/webhooks/whatsapp

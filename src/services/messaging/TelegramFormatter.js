@@ -38,22 +38,28 @@ class TelegramFormatter {
    */
   static buildHeader(query, pagination, language) {
     let header = language === 'ar'
-      ? '🔍 <b>نتائج البحث</b>\n\n'
-      : '🔍 <b>Search Results</b>\n\n';
+      ? '✨ <b>لقيتلك هالإعلانات</b>\n\n'
+      : '✨ <b>Found These Listings</b>\n\n';
 
-    if (query.parsed?.category) {
+    // Check if category exists and is an object (not "none" string)
+    if (query.parsed?.category && typeof query.parsed.category === 'object') {
       const categoryName = language === 'ar' ? query.parsed.category.name_ar : query.parsed.category.name_en;
-      header += `📂 ${categoryName}`;
+      if (categoryName) {
+        header += `📂 ${categoryName}`;
+      }
     }
 
-    if (query.parsed?.location) {
+    // Check if location exists and is an object (not "none" string)
+    if (query.parsed?.location && typeof query.parsed.location === 'object') {
       const locationName = language === 'ar' ? query.parsed.location.name_ar : query.parsed.location.name_en;
-      header += ` في ${locationName}`;
+      if (locationName) {
+        header += ` في ${locationName}`;
+      }
     }
 
     if (pagination.total > 0) {
       header += language === 'ar'
-        ? `\n📊 <i>تم العثور على ${pagination.total} إعلان</i>\n\n`
+        ? `\n📊 <i>في عنا ${pagination.total} إعلان</i>\n\n`
         : `\n📊 <i>Found ${pagination.total} listings</i>\n\n`;
     }
 
@@ -94,7 +100,9 @@ class TelegramFormatter {
         }
       }
 
-      text += `🔗 <a href="${listing.url}">عرض التفاصيل</a>\n\n`;
+      // Ensure URL uses www.kasioon.com
+      const listingUrl = listing.url || `https://www.kasioon.com/listing/${listing.id}`;
+      text += `🔗 <a href="${listingUrl}">عرض التفاصيل</a>\n\n`;
     }
 
     return text;
@@ -113,7 +121,7 @@ class TelegramFormatter {
     if (pagination.total > 5) {
       const remaining = pagination.total - 5;
       footer += language === 'ar'
-        ? `<i>📄 يوجد ${remaining} إعلان إضافي</i>\n`
+        ? `<i>📄 وفي كمان ${remaining} إعلان تاني</i>\n`
         : `<i>📄 ${remaining} more listings available</i>\n`;
     }
 
@@ -136,8 +144,8 @@ class TelegramFormatter {
     if (pagination.total > 5) {
       buttons.push([
         {
-          text: language === 'ar' ? '📄 عرض المزيد على الموقع' : '📄 View More on Website',
-          url: process.env.KASIOON_WEBSITE_URL || 'https://kasioon.com'
+          text: language === 'ar' ? '🌐 شوف الكل على الموقع' : '🌐 View All on Website',
+          url: 'https://www.kasioon.com'
         }
       ]);
     }
@@ -174,8 +182,8 @@ class TelegramFormatter {
    */
   static formatNoResults(query, language) {
     const text = language === 'ar'
-      ? `❌ <b>لم يتم العثور على نتائج</b>\n\nلم نجد أي إعلانات مطابقة لبحثك: "${this.escapeHtml(query)}"\n\n💡 <i>جرب البحث بكلمات مختلفة أو أقل تحديداً</i>`
-      : `❌ <b>No Results Found</b>\n\nNo listings found matching: "${this.escapeHtml(query)}"\n\n💡 <i>Try searching with different or fewer keywords</i>`;
+      ? `😔 <b>ما لقيت شي للأسف</b>\n\nما في إعلانات متل: "${this.escapeHtml(query)}"\n\n💡 <i>جرب تبحث بكلمات تانية أو أقل تحديد</i>`
+      : `😔 <b>No Results Found</b>\n\nNo listings found matching: "${this.escapeHtml(query)}"\n\n💡 <i>Try searching with different or fewer keywords</i>`;
 
     return {
       text,
