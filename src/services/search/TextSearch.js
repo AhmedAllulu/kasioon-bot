@@ -111,18 +111,47 @@ class TextSearch {
   }
 
   /**
-   * Fallback search using LIKE for when no tsvector matches
+   * Title-only search (more precise than searching descriptions)
    * @param {string} query - Search query
    * @param {Object} searchParams - Search parameters
    * @param {number} limit - Result limit
    * @returns {Promise<Array>} Search results
    */
-  async fallbackSearch(query, searchParams = {}, limit = 20) {
+  async titleOnlySearch(query, searchParams = {}, limit = 20) {
     try {
-      logger.debug('Fallback LIKE search started', { query: query.substring(0, 50) });
+      logger.debug('Title-only LIKE search started', { query: query.substring(0, 50) });
 
       const { whereClause, params } = FilterBuilder.build(searchParams);
-      const searchPattern = `%${query}%`;
+
+      // Extract meaningful keywords from query (remove stopwords)
+      const normalized = arabicNormalizer.normalize(query);
+      const keywords = arabicNormalizer.extractKeywords(normalized);
+
+      // Use keywords OR full query for broader matching
+      let searchTerms = keywords.length > 0 ? keywords : [query];
+
+      // Add both normalized and original versions for Arabic normalization issues (ة vs ه)
+      const expandedTerms = [];
+      for (const term of searchTerms) {
+        expandedTerms.push(term); // normalized version
+        // Add original version with ة instead of ه if term contains ه
+        if (term.includes('ه')) {
+          expandedTerms.push(term.replace(/ه/g, 'ة'));
+        }
+        // Add original version with ة if term ends with ه
+        if (term.endsWith('ه')) {
+          expandedTerms.push(term.slice(0, -1) + 'ة');
+        }
+      }
+
+      searchTerms = expandedTerms;
+      const searchPattern = searchTerms.map(k => `%${k}%`);
+
+      // Build ILIKE conditions for TITLE ONLY (not description)
+      const likeConditions = searchTerms.map((_, idx) => {
+        const patternIdx = params.length + 1 + idx;
+        return `l.title ILIKE $${patternIdx}`;
+      }).join(' OR ');
 
       const sql = `
         SELECT
@@ -152,26 +181,122 @@ class TextSearch {
             WHERE listing_id = l.id AND is_main = true
             LIMIT 1
           ) as main_image_url,
-          SIMILARITY(l.title, $${params.length + 1}) as rank_score
+          0.7 as rank_score
         FROM listings l
         JOIN categories c ON l.category_id = c.id
         JOIN cities ct ON l.city_id = ct.id
         LEFT JOIN neighborhoods n ON l.neighborhood_id = n.id
         LEFT JOIN transaction_types tt ON l.transaction_type_id = tt.id
         WHERE ${whereClause}
-          AND (
-            l.title ILIKE $${params.length + 2}
-            OR l.description ILIKE $${params.length + 2}
-          )
+          AND (${likeConditions})
         ORDER BY
-          rank_score DESC,
           l.is_boosted DESC,
           l.priority DESC,
           l.created_at DESC
-        LIMIT $${params.length + 3}
+        LIMIT $${params.length + searchPattern.length + 1}
       `;
 
-      const result = await this.db.query(sql, [...params, query, searchPattern, limit]);
+      const result = await this.db.query(sql, [...params, ...searchPattern, limit]);
+
+      logger.info('Title-only search completed', {
+        query: query.substring(0, 50),
+        results: result.rows.length
+      });
+
+      return await this.enrichResults(result.rows);
+    } catch (error) {
+      logger.error('Title-only search error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fallback search using LIKE for when no tsvector matches
+   * @param {string} query - Search query
+   * @param {Object} searchParams - Search parameters
+   * @param {number} limit - Result limit
+   * @returns {Promise<Array>} Search results
+   */
+  async fallbackSearch(query, searchParams = {}, limit = 20) {
+    try {
+      logger.debug('Fallback LIKE search started', { query: query.substring(0, 50) });
+
+      const { whereClause, params } = FilterBuilder.build(searchParams);
+
+      // Extract meaningful keywords from query (remove stopwords)
+      const normalized = arabicNormalizer.normalize(query);
+      const keywords = arabicNormalizer.extractKeywords(normalized);
+
+      // Use keywords OR full query for broader matching
+      let searchTerms = keywords.length > 0 ? keywords : [query];
+
+      // Add both normalized and original versions for Arabic normalization issues (ة vs ه)
+      const expandedTerms = [];
+      for (const term of searchTerms) {
+        expandedTerms.push(term); // normalized version
+        // Add original version with ة instead of ه if term contains ه
+        if (term.includes('ه')) {
+          expandedTerms.push(term.replace(/ه/g, 'ة'));
+        }
+        // Add original version with ة if term ends with ه
+        if (term.endsWith('ه')) {
+          expandedTerms.push(term.slice(0, -1) + 'ة');
+        }
+      }
+
+      searchTerms = expandedTerms;
+      const searchPattern = searchTerms.map(k => `%${k}%`);
+
+      // Build ILIKE conditions for each search term
+      const likeConditions = searchTerms.map((_, idx) => {
+        const patternIdx = params.length + 1 + idx;
+        return `(l.title ILIKE $${patternIdx} OR l.description ILIKE $${patternIdx})`;
+      }).join(' OR ');
+
+      const sql = `
+        SELECT
+          l.id,
+          l.title,
+          l.description,
+          l.category_id,
+          l.city_id,
+          l.neighborhood_id,
+          l.transaction_type_id,
+          l.views,
+          l.is_boosted,
+          l.priority,
+          l.created_at,
+          c.slug as category_slug,
+          c.name_ar as category_name_ar,
+          c.name_en as category_name_en,
+          ct.name_ar as city_name_ar,
+          ct.name_en as city_name_en,
+          n.name_ar as neighborhood_name_ar,
+          n.name_en as neighborhood_name_en,
+          tt.slug as transaction_type_slug,
+          tt.name_ar as transaction_type_name_ar,
+          tt.name_en as transaction_type_name_en,
+          (
+            SELECT url FROM listing_images
+            WHERE listing_id = l.id AND is_main = true
+            LIMIT 1
+          ) as main_image_url,
+          0.5 as rank_score
+        FROM listings l
+        JOIN categories c ON l.category_id = c.id
+        JOIN cities ct ON l.city_id = ct.id
+        LEFT JOIN neighborhoods n ON l.neighborhood_id = n.id
+        LEFT JOIN transaction_types tt ON l.transaction_type_id = tt.id
+        WHERE ${whereClause}
+          AND (${likeConditions})
+        ORDER BY
+          l.is_boosted DESC,
+          l.priority DESC,
+          l.created_at DESC
+        LIMIT $${params.length + searchPattern.length + 1}
+      `;
+
+      const result = await this.db.query(sql, [...params, ...searchPattern, limit]);
 
       logger.info('Fallback search completed', {
         query: query.substring(0, 50),

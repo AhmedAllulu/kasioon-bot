@@ -14,6 +14,8 @@ class Database {
         throw new Error('MCP_DATABASE_URL is not defined in environment variables');
       }
 
+      logger.info('🔌 Connecting to PostgreSQL database...');
+
       this.pool = new Pool({
         connectionString,
         min: parseInt(process.env.DB_POOL_MIN || '5'),
@@ -29,16 +31,19 @@ class Database {
       await client.query('SELECT NOW()');
       client.release();
 
-      logger.info('PostgreSQL connection pool established');
+      logger.success('PostgreSQL connection pool established', {
+        min: process.env.DB_POOL_MIN || '5',
+        max: process.env.DB_POOL_MAX || '20'
+      });
 
       // Handle pool errors
       this.pool.on('error', (err) => {
-        logger.error('Unexpected error on idle PostgreSQL client', err);
+        logger.dbError('Unexpected error on idle PostgreSQL client', err);
       });
 
       return this.pool;
     } catch (error) {
-      logger.error('Failed to connect to PostgreSQL:', error);
+      logger.failure('Failed to connect to PostgreSQL', { error: error.message });
       throw error;
     }
   }
@@ -46,22 +51,29 @@ class Database {
   async query(text, params) {
     const start = Date.now();
     try {
+      logger.dbQuery('Executing query', {
+        preview: text.substring(0, 100) + (text.length > 100 ? '...' : '')
+      });
+
       const result = await this.pool.query(text, params);
       const duration = Date.now() - start;
 
       if (duration > 1000) {
-        logger.warn(`Slow query detected (${duration}ms):`, {
+        logger.performance('Database query', duration, {
           query: text.substring(0, 100),
-          duration
+          rowCount: result.rowCount
+        });
+      } else if (duration > 500) {
+        logger.debug(`⚠️  Moderate query time: ${duration}ms`, {
+          query: text.substring(0, 100)
         });
       }
 
+      logger.debug(`✓ Query completed: ${result.rowCount} rows in ${duration}ms`);
+
       return result;
     } catch (error) {
-      logger.error('Database query error:', {
-        error: error.message,
-        query: text.substring(0, 100)
-      });
+      logger.dbError('Query execution failed', error, text);
       throw error;
     }
   }

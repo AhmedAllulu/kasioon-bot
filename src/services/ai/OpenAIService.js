@@ -83,7 +83,7 @@ class OpenAIService {
         model: this.models.embedding,
         input: texts,
         encoding_format: 'float',
-        dimensions: 1536 // Reduced from 3072 for pgvector compatibility
+        dimensions: 3072 // Match database vector dimensions
       });
 
       const embeddings = response.data.map(item => item.embedding);

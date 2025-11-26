@@ -82,12 +82,108 @@ class SearchService {
         limit
       };
 
-      logger.debug('Search parameters built', searchParams);
+      logger.info('🔎 Search parameters built', {
+        query: query.substring(0, 50),
+        categoryId: searchParams.categoryId || 'none',
+        cityId: searchParams.cityId || 'none',
+        transactionTypeSlug: searchParams.transactionTypeSlug || 'none',
+        parsed: {
+          category: parsed.category?.name_ar || 'none',
+          location: parsed.location?.name_ar || 'none',
+          transactionType: parsed.transactionType || 'none'
+        }
+      });
+
+      // CONFIDENCE THRESHOLD: Validate or skip weak category matches
+      if (searchParams.categoryId && parsed.confidence < 0.85) {
+        // For medium confidence (0.70-0.85), use AI validation
+        if (parsed.confidence >= 0.70 && parsed.confidence < 0.85) {
+          logger.info('🤖 Medium confidence category match - validating with AI', {
+            category: parsed.category?.name_ar,
+            confidence: parsed.confidence
+          });
+
+          const isValid = await this.validateCategoryWithAI(query, parsed.category, language);
+
+          if (!isValid) {
+            logger.info('❌ AI validation rejected category match', {
+              category: parsed.category?.name_ar
+            });
+            // Remove category filter
+            delete searchParams.categoryId;
+            parsed.category = null;
+          } else {
+            logger.info('✅ AI validation approved category match', {
+              category: parsed.category?.name_ar
+            });
+          }
+        } else {
+          // Very low confidence (<0.70), skip directly to title search
+          logger.info('⚠️  Very low confidence category match - skipping to direct title search', {
+            category: parsed.category?.name_ar,
+            confidence: parsed.confidence,
+            threshold: 0.70
+          });
+
+          // Skip category filter and search directly in titles
+          const directResults = await this.textSearch.titleOnlySearch(
+            query,
+            { ...searchParams, categoryId: undefined },
+            limit * 2
+          );
+
+          if (directResults.length > 0) {
+            logger.info('✓ Found results via direct title search', {
+              count: directResults.length
+            });
+
+            // Continue with normal response formatting
+            const offset = (page - 1) * limit;
+            const total = directResults.length;
+            const paginatedResults = directResults.slice(offset, offset + limit);
+
+            const formattedListings = paginatedResults.map(listing =>
+              responseFormatter.formatListing(listing, language)
+            );
+
+            const suggestions = typeof this.mcp.generateSuggestions === 'function'
+              ? this.mcp.generateSuggestions(parsed)
+              : [];
+
+            const response = responseFormatter.searchResults(
+              formattedListings,
+              {
+                original: query,
+                parsed: {
+                  category: null, // Don't show weak category match
+                  location: parsed.location,
+                  transactionType: parsed.transactionType,
+                  attributes: parsed.attributes,
+                  keywords: parsed.keywords
+                }
+              },
+              responseFormatter.pagination(page, limit, total),
+              suggestions,
+              {
+                responseTime: Date.now() - startTime,
+                searchMethod: 'direct_title',
+                confidence: parsed.confidence
+              }
+            );
+
+            if (total > 0) {
+              await this.cache.setSearchResults(cacheKey, response);
+            }
+
+            return response;
+          }
+        }
+      }
 
       // Determine search strategy
       const searchMethod = await this.determineSearchMethod(parsed, searchParams);
 
-      // Execute search
+      // Execute search with smart fallback
       let results = [];
 
       if (searchMethod === 'vector') {
@@ -97,6 +193,15 @@ class SearchService {
       } else {
         // Hybrid search
         results = await this.performHybridSearch(query, searchParams);
+      }
+
+      // Smart fallback if no results and category was matched
+      if (results.length === 0 && searchParams.categoryId) {
+        logger.info('Zero results with category filter, applying smart fallback', {
+          categoryId: searchParams.categoryId,
+          categoryName: parsed.category?.name_ar
+        });
+        results = await this.smartFallbackSearch(query, searchParams, parsed);
       }
 
       // Apply pagination
@@ -136,8 +241,13 @@ class SearchService {
         }
       );
 
-      // Cache results
-      await this.cache.setSearchResults(cacheKey, response);
+      // Cache results ONLY if there are actual results
+      if (total > 0) {
+        await this.cache.setSearchResults(cacheKey, response);
+        logger.debug(`✓ Cached search results with ${total} listings`);
+      } else {
+        logger.debug('⚠️  Skipping cache for empty results');
+      }
 
       logger.info('Search completed successfully', {
         query: query.substring(0, 50),
@@ -275,6 +385,159 @@ class SearchService {
     } catch (error) {
       logger.error('Hybrid search failed:', error);
       return [];
+    }
+  }
+
+  /**
+   * Smart fallback search when category-filtered search returns 0 results
+   * Tries: parent category → global title search
+   * @param {string} query - Query string
+   * @param {Object} searchParams - Original search parameters
+   * @param {Object} parsed - Parsed query data
+   * @returns {Promise<Array>} Results
+   */
+  async smartFallbackSearch(query, searchParams, parsed) {
+    const db = require('../../config/database');
+
+    try {
+      // Step 1: Recursively climb category tree until we find results or reach root
+      let currentCategoryId = searchParams.categoryId;
+      let depth = 0;
+      const maxDepth = 5; // Prevent infinite loops
+
+      while (currentCategoryId && depth < maxDepth) {
+        const categoryResult = await db.query(
+          'SELECT id, name_ar, name_en, parent_id, level FROM categories WHERE id = $1',
+          [currentCategoryId]
+        );
+
+        if (categoryResult.rows.length === 0) break;
+
+        const category = categoryResult.rows[0];
+
+        // If we have a parent, try searching in it
+        if (category.parent_id) {
+          logger.info(`Fallback Step ${depth + 1}: Trying parent category`, {
+            currentCategory: category.name_ar,
+            parentId: category.parent_id,
+            level: category.level
+          });
+
+          const parentSearchParams = {
+            ...searchParams,
+            categoryId: category.parent_id
+          };
+
+          const parentResults = await this.performTextSearch(query, parentSearchParams);
+
+          if (parentResults.length > 0) {
+            logger.info('✓ Found results in parent category', {
+              parentId: category.parent_id,
+              count: parentResults.length
+            });
+            return parentResults;
+          }
+
+          // Move up to parent for next iteration
+          currentCategoryId = category.parent_id;
+          depth++;
+        } else {
+          // Reached root category with no results
+          logger.info('Reached root category, no results found', {
+            rootCategory: category.name_ar,
+            level: category.level
+          });
+          break;
+        }
+      }
+
+      // Step 2: Search in ALL listings but ONLY in title (more precise)
+      logger.info('Fallback: Searching all listings by title only', {
+        query: query.substring(0, 50)
+      });
+
+      const titleOnlyResults = await this.textSearch.titleOnlySearch(
+        query,
+        { ...searchParams, categoryId: undefined },
+        searchParams.limit * 2
+      );
+
+      if (titleOnlyResults.length > 0) {
+        logger.info('✓ Found results in global title search', {
+          count: titleOnlyResults.length
+        });
+        return titleOnlyResults;
+      }
+
+      // Step 3: Last resort - search title + description globally
+      logger.info('Fallback: Searching all listings by title + description', {
+        query: query.substring(0, 50)
+      });
+
+      const globalResults = await this.textSearch.fallbackSearch(
+        query,
+        { ...searchParams, categoryId: undefined },
+        searchParams.limit * 2
+      );
+
+      if (globalResults.length > 0) {
+        logger.info('✓ Found results in global search', {
+          count: globalResults.length
+        });
+        return globalResults;
+      }
+
+      logger.info('No results found even after fallback attempts');
+      return [];
+    } catch (error) {
+      logger.error('Smart fallback search error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Validate category match using AI
+   * @param {string} query - User query
+   * @param {Object} category - Matched category
+   * @param {string} language - Language
+   * @returns {Promise<boolean>} True if valid match
+   */
+  async validateCategoryWithAI(query, category, language = 'ar') {
+    const openai = require('../ai/OpenAIService');
+
+    try {
+      const prompt = language === 'ar'
+        ? `استعلام المستخدم: "${query}"
+الفئة المطابقة: "${category.name_ar}"
+
+هل هذه الفئة مناسبة لاستعلام المستخدم؟
+أجب بـ "نعم" إذا كانت مناسبة، أو "لا" إذا كانت غير مناسبة.
+الجواب فقط (نعم/لا):`
+        : `User Query: "${query}"
+Matched Category: "${category.name_en}"
+
+Does this category match the user's search intent?
+Answer "yes" if it matches, or "no" if it doesn't.
+Answer only (yes/no):`;
+
+      const response = await openai.quickPrompt(prompt);
+      const answer = response.toLowerCase().trim();
+
+      // Check for positive response in both languages
+      const isValid = answer.includes('yes') || answer.includes('نعم') || answer.includes('صحيح');
+
+      logger.debug('AI category validation result', {
+        query: query.substring(0, 50),
+        category: category.name_ar,
+        aiResponse: answer,
+        isValid
+      });
+
+      return isValid;
+    } catch (error) {
+      logger.error('AI validation error, defaulting to reject:', error);
+      // On error, reject the match to be safe
+      return false;
     }
   }
 

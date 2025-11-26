@@ -55,10 +55,11 @@ class CacheService {
       const cached = await this.get(cacheKey);
 
       if (cached) {
-        logger.debug('Search cache hit', { params: searchParams });
+        logger.cacheHit(`Search results for: ${searchParams.query || searchParams}`);
         return cached;
       }
 
+      logger.cacheMiss(`Search results for: ${searchParams.query || searchParams}`);
       return null;
     } catch (error) {
       logger.error('Cache get error:', error);
@@ -77,10 +78,16 @@ class CacheService {
 
     try {
       const cacheKey = this.generateSearchKey(searchParams);
+      const cacheTTL = ttl || this.redis.getTTL('search');
       await this.set(cacheKey, results, ttl);
-      logger.debug('Search results cached', { params: searchParams, ttl });
+
+      const resultCount = results?.data?.length || 0;
+      logger.debug(`💾 Caching search results: ${resultCount} listings (TTL: ${cacheTTL}s)`, {
+        query: searchParams.query?.substring(0, 50),
+        ttl: cacheTTL
+      });
     } catch (error) {
-      logger.error('Cache set error:', error);
+      logger.error('❌ Cache set error:', error);
     }
   }
 

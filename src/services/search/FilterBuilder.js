@@ -21,13 +21,25 @@ class FilterBuilder {
   }
 
   /**
-   * Add category filter
+   * Add category filter (includes subcategories)
    * @param {string} categoryId - Category UUID
    * @returns {FilterBuilder} this
    */
   addCategory(categoryId) {
     if (categoryId) {
-      this.conditions.push(`l.category_id = $${this.paramCounter}`);
+      // Match category OR any of its descendants
+      this.conditions.push(`(
+        l.category_id = $${this.paramCounter}
+        OR l.category_id IN (
+          WITH RECURSIVE category_tree AS (
+            SELECT id FROM categories WHERE parent_id = $${this.paramCounter}
+            UNION ALL
+            SELECT c.id FROM categories c
+            INNER JOIN category_tree ct ON c.parent_id = ct.id
+          )
+          SELECT id FROM category_tree
+        )
+      )`);
       this.params.push(categoryId);
       this.paramCounter++;
     }
@@ -333,9 +345,10 @@ class FilterBuilder {
     const whereClause = builder.buildWhereClause();
     const params = builder.getParams();
 
-    logger.debug('Filter built', {
-      conditions: builder.conditions.length,
-      params: params.length
+    logger.info('🔧 Filter built', {
+      conditions: builder.conditions,
+      params: params,
+      whereClause: whereClause.substring(0, 200)
     });
 
     return { whereClause, params };

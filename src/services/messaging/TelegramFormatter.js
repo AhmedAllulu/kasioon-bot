@@ -42,11 +42,13 @@ class TelegramFormatter {
       : '🔍 <b>Search Results</b>\n\n';
 
     if (query.parsed?.category) {
-      header += `📂 ${query.parsed.category.name}`;
+      const categoryName = language === 'ar' ? query.parsed.category.name_ar : query.parsed.category.name_en;
+      header += `📂 ${categoryName}`;
     }
 
     if (query.parsed?.location) {
-      header += ` في ${query.parsed.location.name}`;
+      const locationName = language === 'ar' ? query.parsed.location.name_ar : query.parsed.location.name_en;
+      header += ` في ${locationName}`;
     }
 
     if (pagination.total > 0) {

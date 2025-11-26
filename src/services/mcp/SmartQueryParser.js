@@ -106,9 +106,10 @@ class SmartQueryParser {
     const transactionType = this.dbMatcher.matchTransactionType(normalized, language);
     const attributes = this.dbMatcher.extractNumericAttributes(normalized);
 
-    // If category is not leaf, try to find better match
+    // If category is not leaf AND confidence is low, try to find better match
+    // Skip leaf category search for high-confidence matches to avoid false matches
     let finalCategory = category;
-    if (category && category.level < 2) {
+    if (category && category.level < 2 && category.confidence < 0.9) {
       const leafCategory = await this.dbMatcher.findLeafCategory(
         category.id,
         tokens,
@@ -411,11 +412,14 @@ Extract JSON: {"category":"specific item","location":"city name","transaction":"
       language: parsed.language
     };
 
-    if (parsed.category?.id) {
+    // Only apply category filter if high confidence (>= 0.85)
+    if (parsed.category?.id && parsed.category?.confidence >= 0.85) {
       params.categoryId = parsed.category.id;
     }
 
-    if (parsed.location) {
+    // Only apply location filter if high confidence (>= 0.8)
+    // This prevents false location matches from stopwords like "في", "على", etc.
+    if (parsed.location && parsed.location?.confidence >= 0.8) {
       if (parsed.location.type === 'city') {
         params.cityId = parsed.location.id;
       } else if (parsed.location.type === 'neighborhood') {
@@ -424,14 +428,18 @@ Extract JSON: {"category":"specific item","location":"city name","transaction":"
       }
     }
 
-    if (parsed.transactionType) {
-      params.transactionTypeSlug = parsed.transactionType;
+    // Only apply transaction type filter if explicitly mentioned (confidence 1.0)
+    // Don't filter by transaction type unless user clearly states it
+    if (parsed.transactionType?.slug && parsed.transactionType?.confidence === 1.0) {
+      params.transactionTypeSlug = parsed.transactionType.slug;
     }
 
+    // Apply attributes (no confidence threshold - these are numeric extractions)
     if (parsed.attributes) {
       params.attributes = parsed.attributes;
     }
 
+    // Include keywords for text search fallback
     if (parsed.keywords) {
       params.keywords = parsed.keywords;
     }
